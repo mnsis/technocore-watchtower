@@ -3,76 +3,59 @@
 <p align="center">Read-only security observability for Technocore</p>
 <p align="center"><a href="https://technocore-watchtower.vercel.app">Live Dashboard</a> · <a href="https://watchtower.37.27.18.191.sslip.io/api/v1/summary?hours=24">API</a> · <a href="https://github.com/mnsis/technocore-watchtower">Source</a></p>
 
-Technocore Watchtower is a read-only security-observability tool for public
-Technocore rooms. It records lightweight event metadata, surfaces identity
-visibility, warns when unsigned nicknames resemble configured privileged names,
-and statically identifies URLs shaped like documented Technocore write routes.
-
-**Live Dashboard:** [https://technocore-watchtower.vercel.app](https://technocore-watchtower.vercel.app)
+Watchtower monitors configured public Technocore rooms. It stores event metadata,
+shows server-exposed DID information, warns about unsigned privileged-looking
+names, and detects documented Technocore write-route patterns.
 
 > Independent community project. Technocore Watchtower is not official FLOP Labs
 > software and does not speak for FLOP Labs or Technocore operators.
 
-## What Watchtower provides
+## What it does
 
-- Continuous observation of configured public Technocore rooms
-- Visibility into server-exposed signed DID metadata
+- Monitors configured public Technocore rooms
+- Shows server-exposed signed DID metadata
 - Warnings for unsigned privileged-looking names
 - Conservative protected-name confusable detection in the risk-v2 shadow engine
 - Static detection of documented Technocore write-capable URL patterns
-- Explainable severity and security signals over observed metadata
-- Metadata-only SQLite persistence
-- A live dashboard with room and event telemetry
-- CLI security reports and a read-only JSON API
-- Near-real-time streaming via Server-Sent Events (SSE)
-- Responsive Overview, Events, and Rooms views over HTTPS
+- Produces explainable scanner flags and severity levels
+- Stores event metadata in SQLite
+- Includes CLI reports and a JSON API
+- Streams updates with Server-Sent Events (SSE)
+- Serves public Overview, Events, and Rooms pages over HTTPS
 
 New observations normally appear in the dashboard without a page reload. SSE is
 the primary live transport; aggregate summary and room updates are debounced to
 limit load. Five-second polling activates only as a fallback when SSE is
 temporarily unavailable and stops after the stream recovers.
 
-## Security Report
+## CLI report
 
-The metadata-only CLI report gives developers and agents a quick view of identity
-signals, write-capable URL detections, severity counts, scanner flags, and the
-most frequently flagged observed rooms without requiring the dashboard.
+The CLI report summarizes identity signals, write-route detections, severity
+counts, scanner flags, and flagged rooms.
 
 ```bash
 python -m app.report --hours 24
 ```
 
-Short output example:
-
-```text
-Technocore Watchtower — Security Report
-Period: Last 24 hours
-Rooms observed: <count>
-Observations: <count>
-```
-
-For stable machine-readable output:
+For JSON output:
 
 ```bash
 python -m app.report --hours 24 --json
 ```
 
-JSON output contains aggregate metadata only and can be consumed by other agents,
-scripts, or monitoring systems.
+The JSON output contains aggregate metadata for scripts and monitoring systems.
 
 ## For developers and agents
 
-The versioned metadata API is intended for agents, monitoring tools, security
-dashboards, and developers investigating observed Technocore activity. It is
-GET-only, has no wildcard CORS policy, and never returns raw message bodies or
-message-derived URLs.
+The versioned API is GET-only. It does not return message bodies or detected URLs
+and does not enable wildcard CORS.
 
 ```bash
 curl 'https://watchtower.37.27.18.191.sslip.io/api/v1/summary?hours=24'
 curl 'https://watchtower.37.27.18.191.sslip.io/api/v1/events?severity=high&limit=20'
 ```
 
-Tools can consume these metadata-only resources:
+Available endpoints:
 
 - `GET /api/v1/summary`
 - `GET /api/v1/events`
@@ -81,25 +64,19 @@ Tools can consume these metadata-only resources:
 
 Event filtering supports room, severity, scanner flag, result limit, and the
 exclusive `before_id` pagination cursor. The public dashboard uses
-`GET /api/v1/stream` for live updates, but browser access to that SSE endpoint is
-restricted to the production Watchtower Vercel origin; it is not a general
-cross-origin browser integration endpoint. The JSON APIs retain their
-same-origin/no-wildcard-CORS model.
+`GET /api/v1/stream` for live updates. Browser access to the stream is restricted
+to the production Vercel origin; it is not a general cross-origin endpoint.
 
-The API reports Watchtower's own observations only. It is neither an official
-FLOP Labs integration nor a complete index of Technocore activity.
+The API reports Watchtower's observations, not a complete index of Technocore.
 
 ## Read-only by design
 
-Watchtower's network transport exposes only fixed public read operations. It uses
-GET because Technocore's public read API uses GET, but it never constructs known
-write-capable GET routes. Redirects are blocked, TLS verification remains enabled,
-room names are validated locally, and runtime requests stay on the configured
-origin.
+Watchtower requests fixed public read endpoints. It does not construct known
+write routes. Redirects are blocked, TLS verification stays enabled, room names
+are validated locally, and requests stay on the configured origin.
 
-URLs found in messages are untrusted text. Watchtower parses their structure
-without resolving, previewing, following, or otherwise contacting them. Message
-content is never executed or used to choose a network destination.
+Watchtower parses URL structure without resolving, previewing, or following the
+URL. Message content cannot select a network destination.
 
 Raw message bodies are processed briefly in memory and are not stored. SQLite
 contains timestamps, room and sequence metadata, sender/identity metadata,
@@ -108,7 +85,7 @@ not persisted.
 
 ## Security model
 
-The current scanner emits neutral, deterministic indicators:
+The scanner emits these deterministic indicators:
 
 - `DID_PRESENT`: a `did:key` identifier appeared in normalized metadata. This is
   not independent signature verification.
@@ -120,9 +97,8 @@ The current scanner emits neutral, deterministic indicators:
 - `SUSPICIOUS_COMBINATION`: multiple objective indicators occurred together. It
   is not proof of malicious intent.
 
-Watchtower is not an identity authority or reputation system. It does not label
-users as trusted, official, malicious, or verified. It does not create DIDs,
-hold keys or wallets, or send messages to Technocore.
+Watchtower is not an identity authority or reputation system. It does not create
+DIDs, hold keys or wallets, or send messages to Technocore.
 
 For Technocore JSON records, the adapter treats a canonical Ed25519 `did:key` in
 `from` together with the signed-record-only integer `nonce` as server-exposed
@@ -135,27 +111,23 @@ guidance.
 
 ### Risk-v2 shadow model
 
-`risk-v2-shadow-1` is a versioned, deterministic, explainable event-risk model.
-It evaluates event evidence across identity, impersonation, capability,
-behavioral, and bounded temporal-context families. Its conservative name
-normalization and confusable checks are deliberately narrow to limit false
-positives.
+`risk-v2-shadow-1` is a versioned event-risk model. It evaluates identity,
+impersonation, capability, behavioral, and bounded temporal signals. Name
+normalization and confusable matching are intentionally conservative.
 
-Risk-v2 currently runs in **shadow mode** for calibration. It stores results
-separately and does not replace the public dashboard's authoritative production
-severity classification. Historical context modifies an event evaluation; it
-does not create permanent trust or reputation scores for a DID. Contributors can
-inspect aggregate calibration with `python -m app.report --risk-v2`.
+Risk-v2 runs in **shadow mode**. Its results are stored separately and do not
+replace the public severity classification. Historical context can modify an
+event score, but Watchtower does not assign permanent DID reputation scores.
+Run `python -m app.report --risk-v2` to inspect aggregate shadow results.
 
-A zero count for HIGH or CRITICAL is valid when observations contain no
-sufficiently strong, independently corroborated evidence. Scores and flags are
-observable security indicators, not conclusions about intent.
+Zero HIGH or CRITICAL events is a valid result when the evidence does not meet
+those thresholds. Scores and flags are indicators, not conclusions about intent.
 
 ## Architecture
 
 ```text
 Technocore public rooms
-  -> hardened VPS Watchtower collector
+  -> VPS Watchtower collector
   -> metadata-only SQLite
   -> scanner + risk-v2 shadow processing
   -> read-only API + SSE
@@ -163,11 +135,9 @@ Technocore public rooms
   -> humans / agents / monitoring tools
 ```
 
-The VPS is the source of truth: it performs continuous collection, scanning,
-metadata persistence, API serving, and SSE publication. Vercel hosts the public
-presentation layer and an allowlisted read-only API proxy. The browser connects
-directly to the VPS SSE endpoint under an exact-origin CORS policy because the
-long-lived stream is not routed through a serverless proxy.
+The VPS collects and scans observations, stores metadata, and serves the API and
+SSE stream. Vercel serves the frontend and proxies allowlisted API routes. The
+browser connects directly to the VPS stream under an exact-origin CORS policy.
 
 ## Requirements
 
@@ -203,9 +173,8 @@ review.
 
 ## Dashboard
 
-The Watchtower dashboard provides a responsive dark observability interface
-with live metadata totals, 24-hour activity and severity charts, filtered event
-views, observed-room summaries, runtime health, and links to the read-only API.
+The dashboard shows live totals, 24-hour charts, filtered events, room summaries,
+runtime health, and API links.
 Charts use a small local canvas renderer; no remote frontend assets, analytics,
 or message-derived resources are loaded.
 
@@ -227,7 +196,7 @@ pip-audit
 
 - **Frontend:** Vercel serves the public dashboard at
   [technocore-watchtower.vercel.app](https://technocore-watchtower.vercel.app).
-- **Collector, API, and SSE:** a hardened VPS continuously observes configured
+- **Collector, API, and SSE:** a VPS continuously observes configured
   rooms and exposes the backend at
   [watchtower.37.27.18.191.sslip.io](https://watchtower.37.27.18.191.sslip.io).
 - **Application stack:** FastAPI, SQLite, systemd, and Nginx on the VPS; static
@@ -239,15 +208,12 @@ collector, polling worker, SQLite database, or Technocore transport.
 ## Data and privacy
 
 The default database path is `data/watchtower.sqlite3`; database files are ignored
-by Git. The dashboard intentionally has no original-message view. Treat sender
-names, DIDs, room names, and all other remote fields as untrusted metadata.
+by Git. There is no original-message view. Sender names, DIDs, room names, and
+other remote fields are untrusted metadata.
 
-Watchtower does not independently establish identity trust or reputation, persist
-raw message bodies or detected URLs, follow message-derived URLs, use external
-identity enrichment, or write to Technocore. A scanner
-flag records an objective metadata condition; it does not claim malicious intent.
-Technocore Watchtower is an independent community project, not an official FLOP
-Labs product.
+Watchtower does not verify identity trust, persist message bodies or detected
+URLs, follow message-derived URLs, enrich identities externally, or write to
+Technocore. Flags describe observed conditions, not intent.
 
 ## Contributing
 

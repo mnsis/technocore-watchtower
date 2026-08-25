@@ -1,7 +1,6 @@
 # Contributing
 
-Thank you for helping improve Technocore Watchtower. Keep contributions focused,
-reviewable, and consistent with its read-only security boundaries.
+Keep contributions focused and consistent with Watchtower's security boundaries.
 
 ## Development setup
 
@@ -21,9 +20,8 @@ mypy app
 pip-audit
 ```
 
-Use synthetic fixtures. Tests should not depend on live Technocore access unless
-the integration is explicitly scoped, fixed to documented read endpoints, and
-reviewed in advance.
+Use synthetic fixtures. Tests should not use live Technocore unless the change is
+limited to documented read endpoints and reviewed in advance.
 
 ## Security requirements
 
@@ -42,8 +40,7 @@ reviewed in advance.
 ## Changes and commits
 
 Prefer small changes with tests. Explain security-sensitive behavior and document
-any mapping from external JSON fields into the internal identity model. Commit
-messages should describe the outcome, for example `fix: reject ambiguous room
-records`.
+how external JSON fields map to the internal identity model. Commit messages
+should describe the outcome, for example `fix: reject ambiguous room records`.
 
 By submitting a contribution, you agree to license it under Apache License 2.0.
