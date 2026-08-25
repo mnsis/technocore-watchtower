@@ -1,5 +1,6 @@
 import asyncio
 import socket
+import sqlite3
 
 from app.adapter import adapt_room_response
 from app.runtime import PollingWorker, RuntimeState
@@ -138,17 +139,28 @@ def test_poll_worker_publishes_only_newly_persisted_metadata(tmp_path):
     store = EventStore(tmp_path / "events.sqlite3")
     store.initialize()
     published = []
+
+    def publish(metadata):
+        with sqlite3.connect(store.path) as connection:
+            evaluation_count = connection.execute(
+                "SELECT count(*) FROM risk_evaluations WHERE event_id = ?",
+                (metadata["id"],),
+            ).fetchone()[0]
+        assert evaluation_count == 1
+        published.append(metadata)
+
     worker = PollingWorker(
         transport,
         Watcher(store),
         RuntimeState(("lobby",)),
         poll_interval=5,
-        observation_publisher=published.append,
+        observation_publisher=publish,
     )
     assert asyncio.run(worker.poll_once()) is True
     assert len(published) == 1
     assert published[0]["id"] == 1
     assert "text" not in published[0] and "urls" not in published[0]
+    assert "risk_score" not in published[0] and "shadow_classification" not in published[0]
     assert asyncio.run(worker.poll_once()) is True
     assert len(published) == 1
 

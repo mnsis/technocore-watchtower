@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from .config import WatchtowerConfig
 from .models import SecurityEvent
 from .parser import parse_message
+from .risk import RiskEngine
 from .scanner import scan_message
 from .storage import EventStore
 
@@ -17,11 +18,12 @@ class Watcher:
     def __init__(self, store: EventStore, config: WatchtowerConfig | None = None) -> None:
         self.store = store
         self.config = config or WatchtowerConfig()
+        self.risk_engine = RiskEngine(self.config)
 
     def process(self, data: Mapping[str, Any]) -> tuple[SecurityEvent, bool]:
         message = parse_message(data)
         event = scan_message(message, self.config)
-        inserted = self.store.insert(event)
+        inserted = self.store.insert(event, self.risk_engine)
         return event, inserted
 
     def process_many(

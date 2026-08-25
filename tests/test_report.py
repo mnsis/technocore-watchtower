@@ -182,6 +182,31 @@ def test_raw_message_content_never_appears_in_report_output(tmp_path):
     assert secret_body not in json.dumps(result)
 
 
+def test_optional_shadow_report_is_internal_and_metadata_only(tmp_path):
+    store = make_store(tmp_path)
+    Watcher(store).process(
+        {
+            "room": "lobby",
+            "sequence": 1,
+            "timestamp": NOW.isoformat(),
+            "sender_name": "alice",
+            "text": "private synthetic body",
+        }
+    )
+    result = report(store)
+    result["risk_v2_shadow"] = store.shadow_risk_report(24, generated_at=NOW)
+    rendered = render_human(result)
+    assert "risk-v2-shadow-1" in rendered
+    assert "NONE:       1" in rendered
+    assert "private synthetic body" not in rendered
+
+
+def test_shadow_cli_flags_are_explicit():
+    args = build_parser().parse_args(["--risk-shadow", "--backfill-risk-shadow"])
+    assert args.risk_shadow
+    assert args.backfill_risk_shadow
+
+
 @pytest.mark.parametrize("value", ["0", "-1", "1.5", "not-a-number"])
 def test_invalid_hours_are_rejected(value):
     with pytest.raises(SystemExit) as error:
