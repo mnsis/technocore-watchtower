@@ -1,10 +1,11 @@
+<div data-live-event-container>
 {% if events %}
 <div class="table-wrap">
   <table class="events-table">
     <thead><tr><th>Time</th><th>Room</th><th>Sequence</th><th>Sender</th><th>Identity status</th><th>Flags</th><th>Severity</th></tr></thead>
     <tbody>
     {% for event in events %}
-      <tr>
+      <tr data-event-id="{{ event.id }}">
         <td><a class="event-time" href="/events/{{ event.id }}">{{ event.message_timestamp }}</a></td>
         <td><span class="room-badge">#{{ event.room }}</span></td>
         <td><code class="sequence">{{ event.sequence }}</code></td>
@@ -20,3 +21,4 @@
 {% else %}
 <div class="empty-state"><span aria-hidden="true">◇</span><h3>No matching observations</h3><p>Watchtower will display metadata after a configured-room observation matches this view.</p></div>
 {% endif %}
+</div>

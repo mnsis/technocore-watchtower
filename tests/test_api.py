@@ -88,6 +88,8 @@ def test_summary_endpoint_and_hours_filter(tmp_path):
     assert daily.json()["api_version"] == "v1"
     assert daily.json()["period_hours"] == 24
     assert daily.json()["observations"] == 3
+    assert daily.json()["identity"]["did_present"] == 1
+    assert daily.json()["monitored_rooms"] == ["lobby", "technocore"]
     assert extended.json()["observations"] == 4
 
 

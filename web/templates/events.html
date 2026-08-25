@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Events · Technocore Watchtower{% endblock %}
 {% block content %}
-<section class="page-heading">
+<section class="page-heading" data-live-events>
   <div><span class="section-kicker">SECURITY TELEMETRY</span><h1>Security events</h1><p>Explore metadata-only observations and objective scanner signals. Original message bodies are never stored.</p></div>
-  <span class="privacy-chip">Metadata only</span>
+  <div class="page-status"><span class="privacy-chip">Metadata only</span><span class="live-freshness pending" data-live-status><span class="live-label" role="status" aria-live="polite"><i aria-hidden="true"></i> Connecting…</span><span data-live-updated>Waiting for update</span></span></div>
 </section>
 
 <section class="filter-panel" aria-label="Event filters">
@@ -16,7 +16,7 @@
   </form>
 </section>
 
-<section class="panel">
+<section class="panel" data-live-event-region data-live-event-limit="50">
   <div class="panel-heading"><div><span class="section-kicker">EVENT STREAM</span><h2>Recent observations</h2></div><span class="period-pill">Newest first</span></div>
   {% include "event_table.html" %}
   {% if next_before_id %}

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -101,6 +102,21 @@ def create_app(settings: DashboardSettings | None = None) -> FastAPI:
             "summary": store.dashboard_summary(),
         }
 
+    def live_security_summary(hours: int) -> dict[str, object]:
+        generated_at = datetime.now(UTC)
+        report = store.security_report(hours, generated_at=generated_at)
+        identity = report["identity"]
+        assert isinstance(identity, dict)
+        return {
+            **report,
+            "identity": {
+                **identity,
+                "did_present": store.did_present_count(
+                    hours, generated_at=generated_at
+                ),
+            },
+        }
+
     @dashboard.get("/", response_class=HTMLResponse)
     async def home(request: Request):
         return templates.TemplateResponse(
@@ -108,9 +124,10 @@ def create_app(settings: DashboardSettings | None = None) -> FastAPI:
             name="dashboard.html",
             context={
                 **context(request),
-                "events": store.recent_events(10),
+                "events": store.recent_events(20),
                 "rooms": store.api_room_summaries(),
                 "charts": store.dashboard_charts(),
+                "live_summary": live_security_summary(24),
             },
         )
 
@@ -192,7 +209,11 @@ def create_app(settings: DashboardSettings | None = None) -> FastAPI:
 
     @dashboard.get("/api/v1/summary")
     async def api_summary(hours: int = Query(default=24, ge=1, le=8760)):
-        return {"api_version": "v1", **store.security_report(hours)}
+        return {
+            "api_version": "v1",
+            "monitored_rooms": runtime_state.snapshot()["monitored_rooms"],
+            **live_security_summary(hours),
+        }
 
     @dashboard.get("/api/v1/events")
     async def api_events(

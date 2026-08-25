@@ -2,7 +2,7 @@ import sqlite3
 
 from fastapi.testclient import TestClient
 
-from app.dashboard import DashboardSettings, create_app
+from app.dashboard import PROJECT_ROOT, DashboardSettings, create_app
 from app.parser import parse_message
 from app.scanner import scan_message
 
@@ -47,11 +47,35 @@ def test_dashboard_rooms_and_local_chart_assets_load(tmp_path):
         root = client.get("/")
         rooms = client.get("/rooms")
         script = client.get("/static/app.js")
+        live_script = client.get("/static/live.js")
     assert rooms.status_code == 200
     assert "Observed rooms" in rooms.text and "#lobby" in rooms.text
     assert 'data-chart="line"' in root.text
     assert "Observations over time" in root.text
     assert script.status_code == 200 and "renderCharts" in script.text
+    assert live_script.status_code == 200
+    assert 'data-live-metric="observations"' in root.text
+    assert "data-live-event-container" in root.text
+    assert "data-live-room-region" in root.text
+    assert "Connecting…" in root.text
+
+
+def test_live_script_uses_safe_read_only_non_overlapping_polling():
+    script = (PROJECT_ROOT / "web" / "static" / "live.js").read_text()
+    for endpoint in (
+        'fetchJson("/api/v1/summary?hours=24"',
+        'fetchJson("/api/v1/events?limit=20"',
+        'fetchJson("/api/v1/rooms"',
+    ):
+        assert endpoint in script
+    assert "const POLL_INTERVAL_MS = 5000" in script
+    assert "const HIDDEN_INTERVAL_MS = 30000" in script
+    assert "if (this.running)" in script
+    assert 'document.addEventListener("visibilitychange"' in script
+    assert "Promise.allSettled" in script
+    assert 'method: "GET"' in script
+    assert ".textContent" in script
+    assert ".innerHTML" not in script
 
 
 def test_event_filters_are_get_only_and_preserve_metadata_privacy(tmp_path):

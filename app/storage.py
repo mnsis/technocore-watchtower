@@ -439,6 +439,26 @@ class EventStore:
             "top_flagged_rooms": [dict(row) for row in top_rooms],
         }
 
+    def did_present_count(
+        self, hours: int = 24, *, generated_at: datetime | None = None
+    ) -> int:
+        """Count DID-present metadata for the API summary time window."""
+
+        if isinstance(hours, bool) or not isinstance(hours, int) or hours <= 0:
+            raise ValueError("hours must be a positive integer")
+        selected_time = generated_at or datetime.now(UTC)
+        if selected_time.tzinfo is None or selected_time.utcoffset() is None:
+            raise ValueError("generated_at must be timezone-aware")
+        selected_time = selected_time.astimezone(UTC)
+        cutoff = selected_time - timedelta(hours=hours)
+        with sqlite3.connect(self.path) as connection:
+            row = connection.execute(
+                """SELECT coalesce(sum(did_present), 0)
+                FROM events WHERE observed_at >= ? AND observed_at <= ?""",
+                (cutoff.isoformat(), selected_time.isoformat()),
+            ).fetchone()
+        return int(row[0]) if row is not None else 0
+
     @staticmethod
     def _event_row(row: sqlite3.Row) -> dict[str, object]:
         data = dict(row)

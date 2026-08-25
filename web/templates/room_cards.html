@@ -1,0 +1,21 @@
+{% if rooms %}
+<section class="room-card-grid">
+  {% for room in rooms %}
+  <article class="panel room-card" data-room-name="{{ room.room }}">
+    <div class="room-card-head"><div><span class="room-badge">#{{ room.room }}</span><h2>{{ room.observations }} observations</h2></div><span class="severity severity-{{ 'high' if room.severity.high else ('medium' if room.severity.medium else 'none') }}"><span aria-hidden="true"></span>{{ room.flagged_events }} flagged</span></div>
+    <dl>
+      <div><dt>Last sequence</dt><dd>{{ room.last_sequence if room.last_sequence is not none else "N/A" }}</dd></div>
+      <div><dt>Last seen</dt><dd>{{ room.last_seen or "Not available" }}</dd></div>
+    </dl>
+    <div class="severity-strip" aria-label="Severity counts">
+      <span><i class="dot high"></i>High <strong>{{ room.severity.high }}</strong></span>
+      <span><i class="dot medium"></i>Medium <strong>{{ room.severity.medium }}</strong></span>
+      <span><i class="dot low"></i>Low <strong>{{ room.severity.low }}</strong></span>
+      <span><i class="dot info"></i>Info <strong>{{ room.severity.info }}</strong></span>
+      <span><i class="dot none"></i>None <strong>{{ room.severity.none }}</strong></span>
+    </div>
+    <a class="text-link" href="/events?room={{ room.room }}">View room events <span aria-hidden="true">→</span></a>
+  </article>
+  {% endfor %}
+</section>
+{% else %}<div class="panel empty-state"><span aria-hidden="true">◇</span><h2>No observed rooms yet</h2><p>Room cards will appear after successful configured-room reads.</p></div>{% endif %}
