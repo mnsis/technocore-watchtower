@@ -90,6 +90,7 @@ def test_security_headers_are_present(tmp_path):
     with client:
         response = client.get("/")
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
+    assert "form-action 'self'" in response.headers["content-security-policy"]
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["referrer-policy"] == "no-referrer"
     assert response.headers["x-frame-options"] == "DENY"

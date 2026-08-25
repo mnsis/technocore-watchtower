@@ -82,7 +82,7 @@ def create_app(settings: DashboardSettings | None = None) -> FastAPI:
         response = await call_next(request)
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'; "
-            "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; "
+            "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; "
             "frame-ancestors 'none'"
         )
         response.headers["X-Content-Type-Options"] = "nosniff"
