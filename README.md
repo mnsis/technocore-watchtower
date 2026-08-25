@@ -5,15 +5,27 @@ Technocore rooms. It records lightweight event metadata, surfaces identity
 visibility, warns when unsigned nicknames resemble configured privileged names,
 and statically identifies URLs shaped like documented Technocore write routes.
 
+**Live Dashboard:** [https://technocore-watchtower.vercel.app](https://technocore-watchtower.vercel.app)
+
 > Independent community project. Technocore Watchtower is not official FLOP Labs
 > software and does not speak for FLOP Labs or Technocore operators.
 
-## Public Instance
+## What Watchtower provides
 
-A community-operated instance is available at
-[https://watchtower.37.27.18.191.sslip.io](https://watchtower.37.27.18.191.sslip.io).
-It is independent of FLOP Labs, its API is read-only, and raw message bodies are
-not persisted.
+- Continuous observation of configured public Technocore rooms
+- Visibility into server-exposed signed DID metadata
+- Warnings for unsigned privileged-looking names
+- Static detection of documented Technocore write-capable URL patterns
+- Severity and security signals over observed metadata
+- Metadata-only SQLite persistence
+- A live dashboard with room and event telemetry
+- CLI security reports and a read-only JSON API
+- Near-real-time streaming via Server-Sent Events (SSE)
+
+New observations normally appear in the dashboard without a page reload. SSE is
+the primary live transport; aggregate summary and room updates are debounced to
+limit load. Five-second polling activates only as a fallback when SSE is
+temporarily unavailable and stops after the stream recovers.
 
 ## Security Report
 
@@ -43,7 +55,7 @@ python -m app.report --hours 24 --json
 JSON output contains aggregate metadata only and can be consumed by other agents,
 scripts, or monitoring systems.
 
-## Read-only API
+## For developers and agents
 
 The versioned metadata API is intended for agents, monitoring tools, security
 dashboards, and developers investigating observed Technocore activity. It is
@@ -51,18 +63,26 @@ GET-only, has no wildcard CORS policy, and never returns raw message bodies or
 message-derived URLs.
 
 ```bash
-curl 'http://127.0.0.1:8787/api/v1/summary?hours=24'
-curl 'http://127.0.0.1:8787/api/v1/events?severity=high&limit=20'
+curl 'https://watchtower.37.27.18.191.sslip.io/api/v1/summary?hours=24'
+curl 'https://watchtower.37.27.18.191.sslip.io/api/v1/events?severity=high&limit=20'
 ```
 
-Available endpoints are `/api/v1/summary`, `/api/v1/events`, `/api/v1/rooms`,
-`/api/v1/rooms/{room}`, and the metadata-only Server-Sent Events endpoint
-`/api/v1/stream`. Event filtering supports room, severity, scanner flag, result
-limit, and the exclusive `before_id` pagination cursor. The stream permits CORS
-only from the production Watchtower Vercel origin; the JSON APIs retain their
-same-origin/no-wildcard-CORS model. The API reports Watchtower's local
-observations only; it is not an official FLOP Labs integration or a complete
-index of Technocore activity.
+Tools can consume these metadata-only resources:
+
+- `GET /api/v1/summary`
+- `GET /api/v1/events`
+- `GET /api/v1/rooms`
+- `GET /api/v1/rooms/{room}`
+
+Event filtering supports room, severity, scanner flag, result limit, and the
+exclusive `before_id` pagination cursor. The public dashboard uses
+`GET /api/v1/stream` for live updates, but browser access to that SSE endpoint is
+restricted to the production Watchtower Vercel origin; it is not a general
+cross-origin browser integration endpoint. The JSON APIs retain their
+same-origin/no-wildcard-CORS model.
+
+The API reports Watchtower's own observations only. It is neither an official
+FLOP Labs integration nor a complete index of Technocore activity.
 
 ## Read-only by design
 
@@ -110,20 +130,19 @@ guidance.
 ## Architecture
 
 ```text
-fixed Technocore read endpoint -> VPS GET-only collector -> metadata-only SQLite
-                                                                  |
-                                                                  v
-Browser -> Vercel static frontend -> allowlisted GET proxy -> VPS FastAPI API
-              |                                               |
-              +---- exact-origin SSE connection --------------+
+Technocore public rooms
+  -> VPS Watchtower collector
+  -> metadata-only SQLite
+  -> read-only API + SSE
+  -> Vercel public dashboard
+  -> humans / agents / monitoring tools
 ```
 
-The parser, scanner, storage, transport, adapter, polling worker, and dashboard
-remain on the VPS and separate from the optional Vercel presentation layer. The
-VPS is the source of truth and performs continuous monitoring and metadata
-persistence. Vercel hosts only static public pages plus a small allowlisted proxy
-that rejects write methods before contacting the VPS. This keeps untrusted content
-handling independent from network request construction.
+The VPS is the source of truth: it performs continuous collection, scanning,
+metadata persistence, API serving, and SSE publication. Vercel hosts the public
+presentation layer and an allowlisted read-only API proxy. The browser connects
+directly to the VPS SSE endpoint under an exact-origin CORS policy because the
+long-lived stream is not routed through a serverless proxy.
 
 ## Requirements
 
@@ -159,11 +178,14 @@ review.
 
 ## Dashboard
 
-The server-rendered dashboard provides a responsive dark observability interface
+The Watchtower dashboard provides a responsive dark observability interface
 with live metadata totals, 24-hour activity and severity charts, filtered event
 views, observed-room summaries, runtime health, and links to the read-only API.
 Charts use a small local canvas renderer; no remote frontend assets, analytics,
 or message-derived resources are loaded.
+
+The production dashboard is hosted at
+[https://technocore-watchtower.vercel.app](https://technocore-watchtower.vercel.app).
 
 ![Technocore Watchtower security dashboard](docs/dashboard.png)
 
@@ -176,47 +198,30 @@ mypy app
 pip-audit
 ```
 
-## Deployment status
+## Deployment
 
-Technocore Watchtower has been successfully deployed as a hardened systemd
-service in a live VPS environment. The systemd unit is not currently distributed
-with this repository. The application remains bound to loopback and is published
-through a dedicated Nginx HTTPS reverse proxy at the community-operated instance
-linked above. Docker packaging is not currently provided.
+- **Frontend:** Vercel serves the public dashboard at
+  [technocore-watchtower.vercel.app](https://technocore-watchtower.vercel.app).
+- **Collector, API, and SSE:** a hardened VPS continuously observes configured
+  rooms and exposes the backend at
+  [watchtower.37.27.18.191.sslip.io](https://watchtower.37.27.18.191.sslip.io).
+- **Application stack:** FastAPI, SQLite, systemd, and Nginx on the VPS; static
+  HTML, local CSS, and vanilla JavaScript on Vercel.
 
-### Optional Vercel public frontend
-
-The [`vercel/`](vercel/) directory is a standalone public presentation layer for
-Vercel. Its build copies the canonical local CSS and vanilla JavaScript into a
-static output directory, while explicit same-origin routes proxy the read-only
-summary, events, rooms, single-room, and health APIs to the existing VPS. It does
-not contain or run the collector, polling worker, SQLite database, or Technocore
-transport.
-
-Live observation updates use a direct `EventSource` connection from the production
-Vercel origin to the VPS `/api/v1/stream` endpoint. SSE CORS and frontend CSP are
-restricted to those two exact origins. Five-second same-origin API polling remains
-available only as an automatic fallback when repeated stream reconnection fails.
-
-On Vercel's **New Project** screen select:
-
-- **Root Directory:** `vercel`
-- **Framework Preset:** `Other`
-- **Build Command:** use the repository setting (`sh build.sh`)
-- **Output Directory:** use the repository setting (`dist`)
-- **Install Command:** leave empty/default
-- **Environment Variables:** none
-
-The deployment receives a Vercel-generated hostname such as
-`https://<project-name>.vercel.app`. The original VPS instance remains available
-and unchanged. Technocore Watchtower remains an independent community project,
-not an official FLOP Labs service.
+The VPS application remains loopback-bound behind Nginx. Vercel does not run the
+collector, polling worker, SQLite database, or Technocore transport.
 
 ## Data and privacy
 
 The default database path is `data/watchtower.sqlite3`; database files are ignored
 by Git. The dashboard intentionally has no original-message view. Treat sender
 names, DIDs, room names, and all other remote fields as untrusted metadata.
+
+Watchtower does not independently establish identity trust or reputation, persist
+raw message bodies, follow message-derived URLs, or write to Technocore. A scanner
+flag records an objective metadata condition; it does not claim malicious intent.
+Technocore Watchtower is an independent community project, not an official FLOP
+Labs product.
 
 ## Contributing
 
