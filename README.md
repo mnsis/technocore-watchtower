@@ -8,6 +8,34 @@ and statically identifies URLs shaped like documented Technocore write routes.
 > Independent community project. Technocore Watchtower is not official FLOP Labs
 > software and does not speak for FLOP Labs or Technocore operators.
 
+## Security Report
+
+The metadata-only CLI report gives developers and agents a quick view of identity
+signals, write-capable URL detections, severity counts, scanner flags, and the
+most frequently flagged observed rooms without requiring the dashboard.
+
+```bash
+python -m app.report --hours 24
+```
+
+Short output example:
+
+```text
+Technocore Watchtower — Security Report
+Period: Last 24 hours
+Rooms observed: <count>
+Observations: <count>
+```
+
+For stable machine-readable output:
+
+```bash
+python -m app.report --hours 24 --json
+```
+
+JSON output contains aggregate metadata only and can be consumed by other agents,
+scripts, or monitoring systems.
+
 ## Read-only by design
 
 Watchtower's network transport exposes only fixed public read operations. It uses
