@@ -5,7 +5,7 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from .models import SecurityEvent
+from .models import SecurityEvent, SecurityFlag
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
@@ -33,6 +33,8 @@ REPORT_FLAGS = (
     "POTENTIAL_TECHNOCORE_WRITE_URL",
     "SUSPICIOUS_COMBINATION",
 )
+SEVERITY_NAMES = ("HIGH", "MEDIUM", "LOW", "INFO", "NONE")
+SECURITY_FLAG_NAMES = tuple(flag.value for flag in SecurityFlag)
 
 
 class EventStore:
@@ -120,6 +122,122 @@ class EventStore:
                 FROM events GROUP BY room ORDER BY room"""
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def api_events(
+        self,
+        *,
+        room: str | None = None,
+        severity: str | None = None,
+        flag: str | None = None,
+        limit: int = 50,
+        before_id: int | None = None,
+    ) -> tuple[list[dict[str, object]], int | None]:
+        """Return a cursor page of metadata-only events for the read-only API."""
+
+        if not 1 <= limit <= 200:
+            raise ValueError("limit must be between 1 and 200")
+        if severity is not None and severity not in SEVERITY_NAMES:
+            raise ValueError("unknown severity")
+        if flag is not None and flag not in SECURITY_FLAG_NAMES:
+            raise ValueError("unknown security flag")
+        if before_id is not None and before_id <= 0:
+            raise ValueError("before_id must be positive")
+
+        clauses: list[str] = []
+        parameters: list[object] = []
+        if room is not None:
+            clauses.append("room = ?")
+            parameters.append(room)
+        if severity is not None:
+            clauses.append("severity = ?")
+            parameters.append(severity)
+        if flag is not None:
+            clauses.append(
+                "EXISTS (SELECT 1 FROM json_each(events.flags_json) WHERE value = ?)"
+            )
+            parameters.append(flag)
+        if before_id is not None:
+            clauses.append("id < ?")
+            parameters.append(before_id)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        parameters.append(limit + 1)
+
+        with sqlite3.connect(self.path) as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                """SELECT id, message_timestamp, room, sequence, sender_name,
+                    did, signed_identity_present, severity, flags_json,
+                    message_sha256
+                FROM events"""
+                + where
+                + " ORDER BY id DESC LIMIT ?",
+                parameters,
+            ).fetchall()
+
+        has_more = len(rows) > limit
+        selected = rows[:limit]
+        events = [
+            {
+                "id": row["id"],
+                "timestamp": row["message_timestamp"],
+                "room": row["room"],
+                "sequence": row["sequence"],
+                "sender": row["sender_name"],
+                "did": row["did"],
+                "signed_identity_present": bool(row["signed_identity_present"]),
+                "severity": row["severity"],
+                "flags": json.loads(row["flags_json"]),
+                "message_hash": row["message_sha256"],
+            }
+            for row in selected
+        ]
+        next_before_id = int(selected[-1]["id"]) if has_more and selected else None
+        return events, next_before_id
+
+    def api_room_summaries(self, room: str | None = None) -> list[dict[str, object]]:
+        """Return aggregate metadata for all observed rooms or one room."""
+
+        parameters: tuple[object, ...] = () if room is None else (room,)
+        where = "" if room is None else " WHERE room = ?"
+        with sqlite3.connect(self.path) as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                """SELECT
+                    room,
+                    count(*) AS observations,
+                    coalesce(sum(CASE WHEN EXISTS (
+                        SELECT 1 FROM json_each(events.flags_json)
+                        WHERE value IN (
+                            'UNSIGNED_PRIVILEGED_NAME',
+                            'POTENTIAL_TECHNOCORE_WRITE_URL',
+                            'SUSPICIOUS_COMBINATION'
+                        )
+                    ) THEN 1 ELSE 0 END), 0) AS flagged_events,
+                    max(sequence) AS last_sequence,
+                    max(message_timestamp) AS last_seen,
+                    coalesce(sum(CASE WHEN severity = 'HIGH' THEN 1 ELSE 0 END), 0) AS high,
+                    coalesce(sum(CASE WHEN severity = 'MEDIUM' THEN 1 ELSE 0 END), 0) AS medium,
+                    coalesce(sum(CASE WHEN severity = 'LOW' THEN 1 ELSE 0 END), 0) AS low,
+                    coalesce(sum(CASE WHEN severity = 'INFO' THEN 1 ELSE 0 END), 0) AS info,
+                    coalesce(sum(CASE WHEN severity = 'NONE' THEN 1 ELSE 0 END), 0) AS none
+                FROM events"""
+                + where
+                + " GROUP BY room ORDER BY room",
+                parameters,
+            ).fetchall()
+        return [
+            {
+                "room": row["room"],
+                "observations": row["observations"],
+                "flagged_events": row["flagged_events"],
+                "last_sequence": row["last_sequence"],
+                "last_seen": row["last_seen"],
+                "severity": {
+                    name.casefold(): row[name.casefold()] for name in SEVERITY_NAMES
+                },
+            }
+            for row in rows
+        ]
 
     def security_report(
         self, hours: int = 24, *, generated_at: datetime | None = None

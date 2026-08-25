@@ -7,14 +7,14 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .config import WatchtowerConfig
 from .runtime import PollingWorker, RuntimeState
-from .storage import EventStore
+from .storage import SECURITY_FLAG_NAMES, SEVERITY_NAMES, EventStore
 from .transport import TechnocoreTransport
 from .watcher import Watcher
 
@@ -89,6 +89,8 @@ def create_app(settings: DashboardSettings | None = None) -> FastAPI:
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if request.url.path.startswith("/api/") or request.url.path == "/health":
+            response.headers["Cache-Control"] = "no-store"
         return response
 
     def context(request: Request) -> dict[str, object]:
@@ -136,6 +138,62 @@ def create_app(settings: DashboardSettings | None = None) -> FastAPI:
             "last_successful_poll": snapshot["last_successful_poll"],
             "total_transport_failures": snapshot["total_transport_failures"],
         }
+
+    def validated_room(room: str) -> str:
+        try:
+            return TechnocoreTransport.validate_room(room)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @dashboard.get("/api/v1/summary")
+    async def api_summary(hours: int = Query(default=24, ge=1, le=8760)):
+        return {"api_version": "v1", **store.security_report(hours)}
+
+    @dashboard.get("/api/v1/events")
+    async def api_events(
+        room: str | None = None,
+        severity: str | None = None,
+        flag: str | None = None,
+        limit: int = Query(default=50, ge=1, le=200),
+        before_id: int | None = Query(default=None, ge=1),
+    ):
+        selected_room = validated_room(room) if room is not None else None
+        selected_severity = severity.upper() if severity is not None else None
+        if selected_severity is not None and selected_severity not in SEVERITY_NAMES:
+            raise HTTPException(status_code=422, detail="unknown severity")
+        selected_flag = flag.upper() if flag is not None else None
+        if selected_flag is not None and selected_flag not in SECURITY_FLAG_NAMES:
+            raise HTTPException(status_code=422, detail="unknown security flag")
+        events, next_before_id = store.api_events(
+            room=selected_room,
+            severity=selected_severity,
+            flag=selected_flag,
+            limit=limit,
+            before_id=before_id,
+        )
+        return {
+            "api_version": "v1",
+            "events": events,
+            "pagination": {"limit": limit, "next_before_id": next_before_id},
+            "filters": {
+                "room": selected_room,
+                "severity": selected_severity,
+                "flag": selected_flag,
+                "before_id": before_id,
+            },
+        }
+
+    @dashboard.get("/api/v1/rooms")
+    async def api_rooms():
+        return {"api_version": "v1", "rooms": store.api_room_summaries()}
+
+    @dashboard.get("/api/v1/rooms/{room}")
+    async def api_room(room: str):
+        selected_room = validated_room(room)
+        summaries = store.api_room_summaries(selected_room)
+        if not summaries:
+            raise HTTPException(status_code=404, detail="Observed room not found")
+        return {"api_version": "v1", "room": summaries[0]}
 
     return dashboard
 

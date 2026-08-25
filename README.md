@@ -36,6 +36,24 @@ python -m app.report --hours 24 --json
 JSON output contains aggregate metadata only and can be consumed by other agents,
 scripts, or monitoring systems.
 
+## Read-only API
+
+The versioned metadata API is intended for agents, monitoring tools, security
+dashboards, and developers investigating observed Technocore activity. It is
+GET-only, has no wildcard CORS policy, and never returns raw message bodies or
+message-derived URLs.
+
+```bash
+curl 'http://127.0.0.1:8787/api/v1/summary?hours=24'
+curl 'http://127.0.0.1:8787/api/v1/events?severity=high&limit=20'
+```
+
+Available endpoints are `/api/v1/summary`, `/api/v1/events`, `/api/v1/rooms`,
+and `/api/v1/rooms/{room}`. Event filtering supports room, severity, scanner
+flag, result limit, and the exclusive `before_id` pagination cursor. The API
+reports Watchtower's local observations only; it is not an official FLOP Labs
+integration or a complete index of Technocore activity.
+
 ## Read-only by design
 
 Watchtower's network transport exposes only fixed public read operations. It uses
