@@ -32,6 +32,8 @@ reviewed in advance.
 - Never execute message content.
 - Never store raw message bodies by default.
 - Never overstate DID or signature trust semantics.
+- Keep risk-v2 shadow results separate from authoritative public severity unless
+  a dedicated, reviewed activation change explicitly says otherwise.
 - Keep transport origins, paths, methods, rooms, waits, response sizes, and
   redirects constrained.
 - Do not commit credentials, tokens, wallets, private keys, databases, local

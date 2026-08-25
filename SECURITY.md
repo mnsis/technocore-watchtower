@@ -31,13 +31,17 @@ Technocore room data is untrusted. Watchtower is designed so that:
 - DID presence and signed metadata are not described as independent identity
   verification.
 
-The local dashboard has no authentication and must remain bound to
-`127.0.0.1` until a separate production threat model and deployment review are
-completed.
+The VPS application remains bound to `127.0.0.1`. Reviewed Nginx and Vercel
+layers provide the public dashboard, fixed read-only API proxy, and exact-origin
+SSE access. Directly exposing the application server remains unsupported.
+
+Risk-v2 remains a separately stored shadow evaluation. It does not replace
+public severity, establish intent, or create permanent DID trust/reputation
+profiles.
 
 ## Out of scope
 
-Reports that depend on intentionally exposing the local development server to the
-public internet, disabling TLS verification, or modifying the code to add write
-behavior are outside the current supported configuration. Reports about real
-Technocore content should redact message bodies and personal data.
+Reports that depend on directly exposing the local application server, disabling
+TLS verification, or modifying the code to add write behavior are outside the
+current supported configuration. Reports about real Technocore content should
+redact message bodies and personal data.

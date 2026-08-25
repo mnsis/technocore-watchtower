@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title description">
+  <title id="title">Technocore Watchtower mark</title>
+  <desc id="description">A segmented telemetry ring surrounding a central observation point.</desc>
+  <defs>
+    <linearGradient id="ring" x1="7" y1="7" x2="41" y2="41" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#54d8ff"/>
+      <stop offset="0.52" stop-color="#718dff"/>
+      <stop offset="1" stop-color="#9c7cff"/>
+    </linearGradient>
+    <radialGradient id="aperture">
+      <stop stop-color="#b9f4ff"/>
+      <stop offset="0.45" stop-color="#54d8ff"/>
+      <stop offset="1" stop-color="#718dff"/>
+    </radialGradient>
+  </defs>
+  <circle cx="24" cy="24" r="18" fill="none" stroke="#1b2949" stroke-width="5"/>
+  <circle cx="24" cy="24" r="18" fill="none" stroke="url(#ring)" stroke-width="5" stroke-linecap="round" stroke-dasharray="13 6.8" transform="rotate(-18 24 24)"/>
+  <circle cx="24" cy="24" r="11" fill="none" stroke="#54d8ff" stroke-opacity="0.7" stroke-width="1.75" stroke-linecap="round" stroke-dasharray="4.5 4" transform="rotate(14 24 24)"/>
+  <path d="M14.5 24c2.7-4.1 5.9-6.1 9.5-6.1s6.8 2 9.5 6.1c-2.7 4.1-5.9 6.1-9.5 6.1s-6.8-2-9.5-6.1Z" fill="#07101f" stroke="#718dff" stroke-width="1.5"/>
+  <circle cx="24" cy="24" r="3.2" fill="url(#aperture)"/>
+  <circle cx="24" cy="24" r="1.15" fill="#07101f"/>
+</svg>

@@ -70,3 +70,17 @@ def test_vercel_proxy_is_allowlisted_and_rejects_write_methods():
     assert "ROUTES[routeName]" in proxy
     assert "request.url" not in proxy
     assert "message_body" not in proxy
+
+
+def test_vercel_pages_use_local_mark_and_unambiguous_attribution():
+    pages = [
+        (VERCEL_ROOT / name).read_text()
+        for name in ("index.html", "events.html", "rooms.html")
+    ]
+    for page in pages:
+        assert "/static/watchtower-mark.svg" in page
+        assert "https://x.com/amjawaeth" in page
+        assert "https://x.com/flop_labs" in page
+        assert "not affiliated with or endorsed by FLOP Labs" in page
+        assert 'rel="noopener noreferrer"' in page
+    assert (PROJECT_ROOT / "web" / "static" / "watchtower-mark.svg").is_file()

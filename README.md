@@ -1,4 +1,7 @@
-# Technocore Watchtower
+<p align="center"><img src="web/static/watchtower-mark.svg" width="96" height="96" alt="Technocore Watchtower segmented observation mark"></p>
+<h1 align="center">Technocore Watchtower</h1>
+<p align="center">Read-only security observability for Technocore</p>
+<p align="center"><a href="https://technocore-watchtower.vercel.app">Live Dashboard</a> · <a href="https://watchtower.37.27.18.191.sslip.io/api/v1/summary?hours=24">API</a> · <a href="https://github.com/mnsis/technocore-watchtower">Source</a></p>
 
 Technocore Watchtower is a read-only security-observability tool for public
 Technocore rooms. It records lightweight event metadata, surfaces identity
@@ -15,12 +18,14 @@ and statically identifies URLs shaped like documented Technocore write routes.
 - Continuous observation of configured public Technocore rooms
 - Visibility into server-exposed signed DID metadata
 - Warnings for unsigned privileged-looking names
+- Conservative protected-name confusable detection in the risk-v2 shadow engine
 - Static detection of documented Technocore write-capable URL patterns
-- Severity and security signals over observed metadata
+- Explainable severity and security signals over observed metadata
 - Metadata-only SQLite persistence
 - A live dashboard with room and event telemetry
 - CLI security reports and a read-only JSON API
 - Near-real-time streaming via Server-Sent Events (SSE)
+- Responsive Overview, Events, and Rooms views over HTTPS
 
 New observations normally appear in the dashboard without a page reload. SSE is
 the primary live transport; aggregate summary and room updates are debounced to
@@ -98,7 +103,8 @@ content is never executed or used to choose a network destination.
 
 Raw message bodies are processed briefly in memory and are not stored. SQLite
 contains timestamps, room and sequence metadata, sender/identity metadata,
-scanner flags, severity, and a SHA-256 message hash.
+scanner flags, severity, and a SHA-256 message hash. Detected message URLs are
+not persisted.
 
 ## Security model
 
@@ -127,12 +133,31 @@ signature itself.
 See [SECURITY.md](SECURITY.md) for the threat model and vulnerability-reporting
 guidance.
 
+### Risk-v2 shadow model
+
+`risk-v2-shadow-1` is a versioned, deterministic, explainable event-risk model.
+It evaluates event evidence across identity, impersonation, capability,
+behavioral, and bounded temporal-context families. Its conservative name
+normalization and confusable checks are deliberately narrow to limit false
+positives.
+
+Risk-v2 currently runs in **shadow mode** for calibration. It stores results
+separately and does not replace the public dashboard's authoritative production
+severity classification. Historical context modifies an event evaluation; it
+does not create permanent trust or reputation scores for a DID. Contributors can
+inspect aggregate calibration with `python -m app.report --risk-v2`.
+
+A zero count for HIGH or CRITICAL is valid when observations contain no
+sufficiently strong, independently corroborated evidence. Scores and flags are
+observable security indicators, not conclusions about intent.
+
 ## Architecture
 
 ```text
 Technocore public rooms
-  -> VPS Watchtower collector
+  -> hardened VPS Watchtower collector
   -> metadata-only SQLite
+  -> scanner + risk-v2 shadow processing
   -> read-only API + SSE
   -> Vercel public dashboard
   -> humans / agents / monitoring tools
@@ -218,7 +243,8 @@ by Git. The dashboard intentionally has no original-message view. Treat sender
 names, DIDs, room names, and all other remote fields as untrusted metadata.
 
 Watchtower does not independently establish identity trust or reputation, persist
-raw message bodies, follow message-derived URLs, or write to Technocore. A scanner
+raw message bodies or detected URLs, follow message-derived URLs, use external
+identity enrichment, or write to Technocore. A scanner
 flag records an objective metadata condition; it does not claim malicious intent.
 Technocore Watchtower is an independent community project, not an official FLOP
 Labs product.

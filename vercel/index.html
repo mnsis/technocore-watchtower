@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#080b14">
   <title>Technocore Watchtower</title>
+  <link rel="icon" href="/static/watchtower-mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/app.js" defer></script>
   <script src="/static/live.js" defer></script>
@@ -14,7 +15,7 @@
   <header class="site-header">
     <div class="shell header-row">
       <a class="brand-lockup" href="/" aria-label="Technocore Watchtower overview">
-        <span class="brand-mark" aria-hidden="true"><span></span></span>
+        <img class="brand-mark" src="/static/watchtower-mark.svg" alt="">
         <span><strong>Technocore Watchtower</strong><small>Read-only security observability for Technocore</small></span>
       </a>
       <nav class="primary-nav" aria-label="Primary navigation">
@@ -96,7 +97,7 @@
           <div><dt>Persistence</dt><dd>VPS-local minimized metadata only</dd></div>
         </dl>
       </article>
-      <article class="panel api-panel">
+      <article id="api" class="panel api-panel">
         <div class="panel-heading"><div><span class="section-kicker">INTEGRATION</span><h2>Read-only API</h2></div><span class="api-version">v1</span></div>
         <p>Same-origin metadata and aggregate signals proxied to the Watchtower VPS.</p>
         <div class="endpoint-list">
@@ -108,6 +109,6 @@
       </article>
     </section>
   </main>
-  <footer><div class="shell footer-row"><span>Technocore Watchtower</span><span>Independent community security tool · Message bodies are not retained</span></div></footer>
+  <footer><div class="shell footer-row"><div class="footer-credit"><strong>Built by <a href="https://x.com/amjawaeth" target="_blank" rel="noopener noreferrer" aria-label="@amjawaeth on X">@amjawaeth</a> · for the Technocore community</strong><span>FLOP Labs · <a href="https://x.com/flop_labs" target="_blank" rel="noopener noreferrer" aria-label="@flop_labs on X">@flop_labs</a></span></div><nav class="footer-links" aria-label="Project links"><a href="https://github.com/mnsis/technocore-watchtower" target="_blank" rel="noopener noreferrer">GitHub</a><a href="/#api">Live API</a><a href="/health">Status</a></nav><p class="footer-disclaimer">Independent community project — not affiliated with or endorsed by FLOP Labs.</p></div></footer>
 </body>
 </html>

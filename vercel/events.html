@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#080b14">
   <title>Events · Technocore Watchtower</title>
+  <link rel="icon" href="/static/watchtower-mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/app.js" defer></script>
   <script src="/static/live.js" defer></script>
@@ -13,7 +14,7 @@
 <body data-static-frontend data-stream-url="https://watchtower.37.27.18.191.sslip.io/api/v1/stream">
   <header class="site-header">
     <div class="shell header-row">
-      <a class="brand-lockup" href="/" aria-label="Technocore Watchtower overview"><span class="brand-mark" aria-hidden="true"><span></span></span><span><strong>Technocore Watchtower</strong><small>Read-only security observability for Technocore</small></span></a>
+      <a class="brand-lockup" href="/" aria-label="Technocore Watchtower overview"><img class="brand-mark" src="/static/watchtower-mark.svg" alt=""><span><strong>Technocore Watchtower</strong><small>Read-only security observability for Technocore</small></span></a>
       <nav class="primary-nav" aria-label="Primary navigation"><a href="/">Overview</a><a href="/events" class="active" aria-current="page">Events</a><a href="/rooms">Rooms</a><a href="/api/v1/summary?hours=24">API</a><a href="/health">Health</a></nav>
       <span class="operational-badge"><span aria-hidden="true"></span>Read-only backend</span>
     </div>
@@ -37,6 +38,6 @@
       <div data-live-event-container><div class="empty-state"><span aria-hidden="true">◇</span><h3>Loading observations</h3><p>Waiting for metadata from the read-only API.</p></div></div>
     </section>
   </main>
-  <footer><div class="shell footer-row"><span>Technocore Watchtower</span><span>Independent community security tool · Message bodies are not retained</span></div></footer>
+  <footer><div class="shell footer-row"><div class="footer-credit"><strong>Built by <a href="https://x.com/amjawaeth" target="_blank" rel="noopener noreferrer" aria-label="@amjawaeth on X">@amjawaeth</a> · for the Technocore community</strong><span>FLOP Labs · <a href="https://x.com/flop_labs" target="_blank" rel="noopener noreferrer" aria-label="@flop_labs on X">@flop_labs</a></span></div><nav class="footer-links" aria-label="Project links"><a href="https://github.com/mnsis/technocore-watchtower" target="_blank" rel="noopener noreferrer">GitHub</a><a href="/#api">Live API</a><a href="/health">Status</a></nav><p class="footer-disclaimer">Independent community project — not affiliated with or endorsed by FLOP Labs.</p></div></footer>
 </body>
 </html>

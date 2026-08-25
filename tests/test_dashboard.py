@@ -41,6 +41,17 @@ def test_dashboard_root_and_events_load(tmp_path):
     assert events.status_code == 200 and "Security events" in events.text
 
 
+def test_dashboard_branding_and_footer_attribution(tmp_path):
+    client, _ = make_client(tmp_path)
+    with client:
+        response = client.get("/")
+    assert response.status_code == 200
+    assert "/static/watchtower-mark.svg" in response.text
+    assert "https://x.com/amjawaeth" in response.text
+    assert "https://x.com/flop_labs" in response.text
+    assert "not affiliated with or endorsed by FLOP Labs" in response.text
+
+
 def test_dashboard_rooms_and_local_chart_assets_load(tmp_path):
     client, _ = make_client(tmp_path)
     with client:
