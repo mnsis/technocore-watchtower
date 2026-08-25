@@ -107,23 +107,18 @@ guidance.
 ## Architecture
 
 ```text
-fixed Technocore read endpoint
-        |
-        v
-strict GET-only transport -> explicit JSON adapter
-        |                         |
-        +-------------------------+
-                    |
-                    v
-parser -> deterministic scanner -> metadata-only SQLite
-                                      |
-                                      v
-                         local FastAPI dashboard
+fixed Technocore read endpoint -> VPS GET-only collector -> metadata-only SQLite
+                                                                  |
+                                                                  v
+Browser -> Vercel static frontend -> allowlisted GET proxy -> VPS FastAPI API
 ```
 
 The parser, scanner, storage, transport, adapter, polling worker, and dashboard
-remain separate. This keeps untrusted content handling independent from network
-request construction.
+remain on the VPS and separate from the optional Vercel presentation layer. The
+VPS is the source of truth and performs continuous monitoring and metadata
+persistence. Vercel hosts only static public pages plus a small allowlisted proxy
+that rejects write methods before contacting the VPS. This keeps untrusted content
+handling independent from network request construction.
 
 ## Requirements
 
@@ -183,6 +178,29 @@ service in a live VPS environment. The systemd unit is not currently distributed
 with this repository. The application remains bound to loopback and is published
 through a dedicated Nginx HTTPS reverse proxy at the community-operated instance
 linked above. Docker packaging is not currently provided.
+
+### Optional Vercel public frontend
+
+The [`vercel/`](vercel/) directory is a standalone public presentation layer for
+Vercel. Its build copies the canonical local CSS and vanilla JavaScript into a
+static output directory, while explicit same-origin routes proxy the read-only
+summary, events, rooms, single-room, and health APIs to the existing VPS. It does
+not contain or run the collector, polling worker, SQLite database, or Technocore
+transport.
+
+On Vercel's **New Project** screen select:
+
+- **Root Directory:** `vercel`
+- **Framework Preset:** `Other`
+- **Build Command:** use the repository setting (`sh build.sh`)
+- **Output Directory:** use the repository setting (`dist`)
+- **Install Command:** leave empty/default
+- **Environment Variables:** none
+
+The deployment receives a Vercel-generated hostname such as
+`https://<project-name>.vercel.app`. The original VPS instance remains available
+and unchanged. Technocore Watchtower remains an independent community project,
+not an official FLOP Labs service.
 
 ## Data and privacy
 

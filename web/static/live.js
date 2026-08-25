@@ -55,9 +55,10 @@
     row.dataset.eventId = String(eventId);
 
     const timeCell = element("td");
-    const timeLink = element("a", "event-time", event.timestamp || "Not available");
-    timeLink.href = `/events/${eventId}`;
-    timeCell.append(timeLink);
+    const staticFrontend = document.body.hasAttribute("data-static-frontend");
+    const time = element(staticFrontend ? "span" : "a", "event-time", event.timestamp || "Not available");
+    if (!staticFrontend) time.href = `/events/${eventId}`;
+    timeCell.append(time);
     row.append(timeCell);
 
     const roomCell = element("td");
@@ -191,7 +192,7 @@
         region.replaceChildren(chart);
       }
       updateChartList(chart, rooms.map((room) => ({ label: `#${room.room}`, value: room.events })));
-    } else if (region && !region.querySelector(".empty-state")) {
+    } else if (region) {
       const empty = element("div", "empty-state compact");
       const icon = element("span", "", "◇");
       icon.setAttribute("aria-hidden", "true");
@@ -284,6 +285,18 @@
       if (value) query.set(name, value);
     });
     return `/api/v1/events?${query.toString()}`;
+  }
+
+  function syncEventFilters() {
+    if (!document.querySelector("[data-live-events]")) return;
+    const query = new URLSearchParams(window.location.search);
+    ["room", "severity", "flag"].forEach((name) => {
+      const select = document.querySelector(`select[name="${name}"]`);
+      const value = query.get(name);
+      if (select && value && Array.from(select.options).some((option) => option.value === value)) {
+        select.value = value;
+      }
+    });
   }
 
   async function fetchJson(url, signal) {
@@ -412,6 +425,7 @@
     }
   }
 
+  syncEventFilters();
   const request = liveRequest();
   if (request) new LivePoller(request).start();
 

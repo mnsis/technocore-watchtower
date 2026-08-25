@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#080b14">
+  <title>Events · Technocore Watchtower</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+  <script src="/static/live.js" defer></script>
+</head>
+<body data-static-frontend>
+  <header class="site-header">
+    <div class="shell header-row">
+      <a class="brand-lockup" href="/" aria-label="Technocore Watchtower overview"><span class="brand-mark" aria-hidden="true"><span></span></span><span><strong>Technocore Watchtower</strong><small>Read-only security observability for Technocore</small></span></a>
+      <nav class="primary-nav" aria-label="Primary navigation"><a href="/">Overview</a><a href="/events" class="active" aria-current="page">Events</a><a href="/rooms">Rooms</a><a href="/api/v1/summary?hours=24">API</a><a href="/health">Health</a></nav>
+      <span class="operational-badge"><span aria-hidden="true"></span>Read-only backend</span>
+    </div>
+  </header>
+  <main class="shell">
+    <section class="page-heading" data-live-events>
+      <div><span class="section-kicker">SECURITY TELEMETRY</span><h1>Security events</h1><p>Explore metadata-only observations and objective scanner signals. Original message bodies are never stored.</p></div>
+      <div class="page-status"><span class="privacy-chip">Metadata only</span><span class="live-freshness pending" data-live-status><span class="live-label" role="status" aria-live="polite"><i aria-hidden="true"></i> Connecting…</span><span data-live-updated>Waiting for update</span></span></div>
+    </section>
+    <section class="filter-panel" aria-label="Event filters">
+      <form method="get" action="/events">
+        <label>Room<select name="room"><option value="">All observed rooms</option><option value="lobby">#lobby</option><option value="technocore">#technocore</option></select></label>
+        <label>Severity<select name="severity"><option value="">All severities</option><option value="HIGH">HIGH</option><option value="MEDIUM">MEDIUM</option><option value="LOW">LOW</option><option value="INFO">INFO</option><option value="NONE">NONE</option></select></label>
+        <label>Scanner flag<select name="flag"><option value="">All scanner flags</option><option value="DID_PRESENT">DID_PRESENT</option><option value="UNSIGNED_PRIVILEGED_NAME">UNSIGNED_PRIVILEGED_NAME</option><option value="POTENTIAL_TECHNOCORE_WRITE_URL">POTENTIAL_TECHNOCORE_WRITE_URL</option><option value="SUSPICIOUS_COMBINATION">SUSPICIOUS_COMBINATION</option></select></label>
+        <button class="button button-primary" type="submit">Apply filters</button>
+        <a class="button button-ghost" href="/events">Clear</a>
+      </form>
+    </section>
+    <section class="panel" data-live-event-region data-live-event-limit="50">
+      <div class="panel-heading"><div><span class="section-kicker">EVENT STREAM</span><h2>Recent observations</h2></div><span class="period-pill">Newest first</span></div>
+      <div data-live-event-container><div class="empty-state"><span aria-hidden="true">◇</span><h3>Loading observations</h3><p>Waiting for metadata from the read-only API.</p></div></div>
+    </section>
+  </main>
+  <footer><div class="shell footer-row"><span>Technocore Watchtower</span><span>Independent community security tool · Message bodies are not retained</span></div></footer>
+</body>
+</html>
