@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>{% block title %}Technocore Watchtower{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
+</head>
+<body>
+  <header class="site-header">
+    <div class="shell header-row">
+      <div>
+        <a class="brand" href="/">Technocore Watchtower</a>
+        <p class="subtitle">Read-only security observability for Technocore</p>
+      </div>
+      <span class="mode-badge" aria-label="Operating mode: read only">READ-ONLY MONITOR</span>
+    </div>
+    <nav class="shell" aria-label="Primary navigation">
+      <a href="/">Overview</a>
+      <a href="/events">Events</a>
+      <a href="/health">Health JSON</a>
+    </nav>
+  </header>
+  <main class="shell">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="shell">
+    Independent community security tool. Not an official FLOP Labs service.
+    Message bodies are not retained.
+  </footer>
+</body>
+</html>

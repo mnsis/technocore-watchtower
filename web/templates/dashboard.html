@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-intro">
+  <div>
+    <p class="eyebrow">LOCAL TELEMETRY</p>
+    <h1>Observation overview</h1>
+    <p>Objective indicators from explicitly monitored public rooms. Flags are signals, not conclusions about intent.</p>
+  </div>
+  <div class="status-line"><span class="status-dot"></span>{{ "Operational" if not runtime.last_transport_error else "Transport degraded" }}</div>
+</section>
+
+<section class="cards" aria-label="Watchtower summary">
+  <article class="card"><span>Watchtower status</span><strong>{{ "Operational" if not runtime.last_transport_error else "Degraded" }}</strong></article>
+  <article class="card"><span>Last successful read</span><strong class="small-value">{{ runtime.last_successful_poll or "Not available" }}</strong></article>
+  <article class="card"><span>Rooms monitored</span><strong>{{ runtime.monitored_rooms|length }}</strong></article>
+  <article class="card"><span>Total observations</span><strong>{{ summary.total }}</strong></article>
+  <article class="card"><span>DID-present observations</span><strong>{{ summary.did_present }}</strong></article>
+  <article class="card"><span>Unsigned observations</span><strong>{{ summary.unsigned }}</strong></article>
+  <article class="card"><span>Warning / high risk</span><strong>{{ summary.warnings }}</strong></article>
+  <article class="card"><span>Last sequence observed</span><strong>{{ summary.last_sequence if summary.last_sequence is not none else "N/A" }}</strong></article>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><div><p class="eyebrow">LATEST SIGNALS</p><h2>Recent security events</h2></div><a href="/events">View all</a></div>
+  {% include "event_table.html" %}
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><div><p class="eyebrow">SCOPE</p><h2>Observed rooms</h2></div></div>
+  {% if rooms %}
+  <div class="table-wrap"><table><thead><tr><th>Room</th><th>Last sequence</th><th>Last seen</th><th>Observations</th><th>Warnings</th></tr></thead>
+  <tbody>{% for room in rooms %}<tr><td><span class="room">#{{ room.room }}</span></td><td>{{ room.last_sequence }}</td><td>{{ room.last_seen }}</td><td>{{ room.observations }}</td><td>{{ room.warnings }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="empty">No room observations have been stored yet.</p>{% endif %}
+</section>
+
+<section class="panel explanations">
+  <div class="panel-heading"><div><p class="eyebrow">INTERPRETATION</p><h2>Scanner flags</h2></div></div>
+  <dl>
+    <div><dt>DID_PRESENT</dt><dd>A <code>did:key</code> identifier was observed in normalized metadata. Watchtower did not independently verify its signature.</dd></div>
+    <div><dt>UNSIGNED_PRIVILEGED_NAME</dt><dd>A privileged-looking display name was observed without signed identity metadata.</dd></div>
+    <div><dt>POTENTIAL_TECHNOCORE_WRITE_URL</dt><dd>A URL's static structure matched a documented write-capable route on a configured Technocore host. The URL was not contacted.</dd></div>
+    <div><dt>SUSPICIOUS_COMBINATION</dt><dd>Multiple independent risk indicators occurred in the same observation. This is not proof of malicious intent.</dd></div>
+  </dl>
+</section>
+{% endblock %}

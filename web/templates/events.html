@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Events · Technocore Watchtower{% endblock %}
+{% block content %}
+<section class="page-intro"><div><p class="eyebrow">TELEMETRY</p><h1>Security events</h1><p>Recent metadata-only observations. Original message bodies are not stored.</p></div></section>
+<section class="panel">{% include "event_table.html" %}</section>
+{% endblock %}

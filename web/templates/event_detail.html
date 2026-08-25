@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Event {{ event.id }} · Technocore Watchtower{% endblock %}
+{% block content %}
+<section class="page-intro"><div><p class="eyebrow">OBSERVATION {{ event.id }}</p><h1>Event metadata</h1><p>No raw message content is retained or available from this page.</p></div><span class="severity severity-{{ event.severity|lower }}">{{ event.severity }}</span></section>
+<section class="panel detail-grid" aria-label="Event metadata">
+  <div><span>Message timestamp</span><strong>{{ event.message_timestamp }}</strong></div>
+  <div><span>Observed timestamp</span><strong>{{ event.observed_at }}</strong></div>
+  <div><span>Room</span><strong>#{{ event.room }}</strong></div>
+  <div><span>Sequence</span><strong>{{ event.sequence }}</strong></div>
+  <div><span>Observed nickname</span><strong>{{ event.sender_name }}</strong></div>
+  <div><span>Identity status</span><strong>{{ event.identity_status }}</strong></div>
+  <div><span>DID metadata</span><strong class="breakable">{{ event.did or "Not present" }}</strong></div>
+  <div><span>Signed identity metadata</span><strong>{{ "Present" if event.signed_identity_present else "Not present" }}</strong></div>
+  <div class="wide"><span>Scanner flags</span><strong>{{ event.flags|join(", ") if event.flags else "None" }}</strong></div>
+  <div class="wide"><span>SHA-256 of original message</span><code class="breakable">{{ event.message_sha256 }}</code></div>
+</section>
+<p><a href="/events">← Back to events</a></p>
+{% endblock %}
