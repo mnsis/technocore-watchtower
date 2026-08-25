@@ -73,6 +73,14 @@ def test_live_script_uses_safe_read_only_non_overlapping_polling():
     assert "if (this.running)" in script
     assert 'document.addEventListener("visibilitychange"' in script
     assert "Promise.allSettled" in script
+    assert script.index("this.loadInitialSnapshot();") < script.index(
+        "this.source = new EventSource(streamUrl)"
+    )
+    assert '.then((summary) => {' in script
+    assert '.then((events) => updateEvents(events.events))' in script
+    assert '.then((rooms) => updateRooms(rooms.rooms))' in script
+    assert "existing.delete(id)" in script
+    assert "integer(id) > newestSnapshotId" in script
     assert 'method: "GET"' in script
     assert "new EventSource(streamUrl)" in script
     assert "SSE_FAILURES_BEFORE_FALLBACK = 3" in script

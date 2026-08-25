@@ -137,7 +137,7 @@
     const container = document.querySelector("[data-live-event-container]");
     if (!container || !Array.isArray(events)) return;
     if (!events.length) {
-      if (!container.querySelector(".empty-state")) container.replaceChildren(createEventEmptyState());
+      if (!container.querySelector("[data-event-id]")) container.replaceChildren(createEventEmptyState());
       return;
     }
 
@@ -150,16 +150,20 @@
     const existing = new Map(
       Array.from(body.querySelectorAll("[data-event-id]"), (row) => [row.dataset.eventId, row]),
     );
-    const retained = new Set();
-    events.forEach((event) => {
+    const rows = events.map((event) => {
       const id = String(integer(event.id));
       const row = existing.get(id) || createEventRow(event);
-      retained.add(id);
-      body.append(row);
+      existing.delete(id);
+      return row;
     });
+    const newestSnapshotId = Math.max(0, ...events.map((event) => integer(event.id)));
     existing.forEach((row, id) => {
-      if (!retained.has(id)) row.remove();
+      if (integer(id) > newestSnapshotId) rows.push(row);
     });
+    rows.sort((left, right) => integer(right.dataset.eventId) - integer(left.dataset.eventId));
+    const limit = integer(document.querySelector("[data-live-event-region]")?.dataset.liveEventLimit) || events.length;
+    body.replaceChildren(...rows.slice(0, limit));
+    appliedEventId = Math.max(appliedEventId, ...rows.map((row) => integer(row.dataset.eventId)));
   }
 
   function updateChartList(container, points) {
@@ -386,27 +390,24 @@
     return response.json();
   }
 
-  async function fetchAll(requests) {
+  async function settleReads(requests) {
     const results = await Promise.allSettled(requests);
-    const failed = results.find((result) => result.status === "rejected");
-    if (failed) throw failed.reason;
-    return results.map((result) => result.value);
+    if (results.every((result) => result.status === "rejected")) {
+      throw results[0].reason;
+    }
   }
 
   function liveRequest() {
     const dashboard = document.querySelector("[data-live-dashboard]");
     if (dashboard) {
-      return async (signal) => {
-        const [summary, events, rooms] = await fetchAll([
-          fetchJson("/api/v1/summary?hours=24", signal),
-          fetchJson("/api/v1/events?limit=20", signal),
-          fetchJson("/api/v1/rooms", signal),
-        ]);
-        updateMetrics(summary);
-        updateEvents(events.events);
-        updateRooms(rooms.rooms);
-        updateCharts(summary);
-      };
+      return (signal) => settleReads([
+        fetchJson("/api/v1/summary?hours=24", signal).then((summary) => {
+          updateMetrics(summary);
+          updateCharts(summary);
+        }),
+        fetchJson("/api/v1/events?limit=20", signal).then((events) => updateEvents(events.events)),
+        fetchJson("/api/v1/rooms", signal).then((rooms) => updateRooms(rooms.rooms)),
+      ]);
     }
     if (document.querySelector("[data-live-events]") && !new URLSearchParams(window.location.search).has("before_id")) {
       const limit = integer(document.querySelector("[data-live-event-region]")?.dataset.liveEventLimit) || 50;
@@ -522,12 +523,14 @@
       this.poller = new LivePoller(request);
       this.source = null;
       this.failures = 0;
+      this.initialSnapshot = null;
     }
 
     start() {
       window.setInterval(updateObservationAge, 250);
+      this.initialSnapshot = this.loadInitialSnapshot();
       if (typeof window.EventSource !== "function") {
-        this.poller.start();
+        this.initialSnapshot.finally(() => this.poller.start());
         return;
       }
       const streamUrl = document.body.dataset.streamUrl || "/api/v1/stream";
@@ -540,7 +543,11 @@
       this.source.onerror = () => {
         this.failures += 1;
         setConnectionStatus("reconnecting");
-        if (this.failures >= SSE_FAILURES_BEFORE_FALLBACK) this.poller.start();
+        if (this.failures >= SSE_FAILURES_BEFORE_FALLBACK) {
+          this.initialSnapshot.finally(() => {
+            if (this.failures >= SSE_FAILURES_BEFORE_FALLBACK) this.poller.start();
+          });
+        }
       };
       this.source.addEventListener("observation", (message) => {
         const observation = parseEventData(message);
@@ -561,6 +568,18 @@
         const update = parseEventData(message);
         if (update && Array.isArray(update.rooms)) updateRooms(update.rooms);
       });
+    }
+
+    async loadInitialSnapshot() {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      try {
+        await this.poller.request(controller.signal);
+      } catch (_) {
+        // The stream and fallback poller recover independently.
+      } finally {
+        window.clearTimeout(timeout);
+      }
     }
   }
 
