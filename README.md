@@ -42,6 +42,12 @@ Watchtower is not an identity authority or reputation system. It does not label
 users as trusted, official, malicious, or verified. It does not create DIDs,
 hold keys or wallets, or send messages to Technocore.
 
+For Technocore JSON records, the adapter treats a canonical Ed25519 `did:key` in
+`from` together with the signed-record-only integer `nonce` as server-exposed
+signed identity metadata. Watchtower does not currently re-verify that record's
+signature independently because the stored JSON record does not include the
+signature itself.
+
 See [SECURITY.md](SECURITY.md) for the threat model and vulnerability-reporting
 guidance.
 
@@ -74,7 +80,7 @@ request construction.
 ## Installation
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/mnsis/technocore-watchtower.git
 cd technocore-watchtower
 python3 -m venv .venv
 source .venv/bin/activate
@@ -109,10 +115,11 @@ pip-audit
 
 ## Deployment status
 
-Docker packaging is not currently provided. A systemd unit is not currently
-provided or installed. Public deployment, reverse-proxy configuration,
-authentication, and production operations are planned work—not part of the
-current release.
+Technocore Watchtower has been successfully deployed as a hardened systemd
+service in a live VPS environment. The systemd unit is not currently distributed
+with this repository. The dashboard remains private and loopback-only in the
+current deployment; there is no public live demo. Docker packaging is not
+currently provided.
 
 ## Data and privacy
 

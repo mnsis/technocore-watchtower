@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "technocore-watchtower"
 version = "0.1.0"
-description = "Offline core for read-only Technocore security observability"
+description = "Read-only security observability for public Technocore rooms"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"

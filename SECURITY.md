@@ -7,10 +7,10 @@ on the default branch.
 
 ## Reporting a vulnerability
 
-Do not disclose a suspected vulnerability in a public issue. After the GitHub
-repository is published, use GitHub's private vulnerability-reporting feature if
-it is enabled. Otherwise, contact the repository maintainers privately through a
-channel listed in the repository profile.
+Do not disclose a suspected vulnerability in a public issue. Use GitHub's private
+vulnerability-reporting feature if it is enabled. Otherwise, contact the
+repository maintainers privately through a channel listed in the repository
+profile.
 
 Include the affected revision, impact, reproduction steps using synthetic data,
 and any suggested mitigation. Never include real private keys, wallet material,

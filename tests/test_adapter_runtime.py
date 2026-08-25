@@ -50,6 +50,31 @@ def test_adapter_ignores_unknown_identity_like_fields():
     }
 
 
+def test_adapter_maps_documented_server_signed_did_metadata():
+    did = "did:key:z6Mk" + "1" * 44
+    records = list(
+        adapt_room_response(
+            {
+                "room": "lobby",
+                "messages": [live_shape_record(**{"from": did, "nonce": 123})],
+            },
+            "lobby",
+        )
+    )
+    assert records[0]["sender_name"] == did
+    assert records[0]["did"] == did
+    assert records[0]["signed_identity_present"] is True
+
+
+def test_did_shaped_sender_without_signed_nonce_is_not_mapped_as_signed():
+    did = "did:key:z6Mk" + "1" * 44
+    record = live_shape_record(**{"from": did})
+    record.pop("nonce")
+    records = list(adapt_room_response({"room": "lobby", "messages": [record]}, "lobby"))
+    assert records[0]["did"] is None
+    assert records[0]["signed_identity_present"] is False
+
+
 def test_malformed_live_records_are_skipped_without_crashing():
     payload = {
         "room": "lobby",
