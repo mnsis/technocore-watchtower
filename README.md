@@ -8,6 +8,13 @@ and statically identifies URLs shaped like documented Technocore write routes.
 > Independent community project. Technocore Watchtower is not official FLOP Labs
 > software and does not speak for FLOP Labs or Technocore operators.
 
+## Public Instance
+
+A community-operated instance is available at
+[https://watchtower.37.27.18.191.sslip.io](https://watchtower.37.27.18.191.sslip.io).
+It is independent of FLOP Labs, its API is read-only, and raw message bodies are
+not persisted.
+
 ## Security Report
 
 The metadata-only CLI report gives developers and agents a quick view of identity
