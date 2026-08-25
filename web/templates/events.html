@@ -1,6 +1,26 @@
 {% extends "base.html" %}
 {% block title %}Events · Technocore Watchtower{% endblock %}
 {% block content %}
-<section class="page-intro"><div><p class="eyebrow">TELEMETRY</p><h1>Security events</h1><p>Recent metadata-only observations. Original message bodies are not stored.</p></div></section>
-<section class="panel">{% include "event_table.html" %}</section>
+<section class="page-heading">
+  <div><span class="section-kicker">SECURITY TELEMETRY</span><h1>Security events</h1><p>Explore metadata-only observations and objective scanner signals. Original message bodies are never stored.</p></div>
+  <span class="privacy-chip">Metadata only</span>
+</section>
+
+<section class="filter-panel" aria-label="Event filters">
+  <form method="get" action="/events">
+    <label>Room<select name="room"><option value="">All observed rooms</option>{% for item in room_options %}<option value="{{ item.room }}"{% if filters.room == item.room %} selected{% endif %}>#{{ item.room }}</option>{% endfor %}</select></label>
+    <label>Severity<select name="severity"><option value="">All severities</option>{% for item in severity_options %}<option value="{{ item }}"{% if filters.severity == item %} selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
+    <label>Scanner flag<select name="flag"><option value="">All scanner flags</option>{% for item in flag_options %}<option value="{{ item }}"{% if filters.flag == item %} selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
+    <button class="button button-primary" type="submit">Apply filters</button>
+    {% if filters.room or filters.severity or filters.flag %}<a class="button button-ghost" href="/events">Clear</a>{% endif %}
+  </form>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><div><span class="section-kicker">EVENT STREAM</span><h2>Recent observations</h2></div><span class="period-pill">Newest first</span></div>
+  {% include "event_table.html" %}
+  {% if next_before_id %}
+  <div class="pagination"><span>Showing up to 50 events</span><a class="button button-secondary" href="/events?{% if filters.room %}room={{ filters.room }}&amp;{% endif %}{% if filters.severity %}severity={{ filters.severity }}&amp;{% endif %}{% if filters.flag %}flag={{ filters.flag }}&amp;{% endif %}before_id={{ next_before_id }}">Older events <span aria-hidden="true">→</span></a></div>
+  {% endif %}
+</section>
 {% endblock %}

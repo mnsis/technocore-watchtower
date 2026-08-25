@@ -41,6 +41,31 @@ def test_dashboard_root_and_events_load(tmp_path):
     assert events.status_code == 200 and "Security events" in events.text
 
 
+def test_dashboard_rooms_and_local_chart_assets_load(tmp_path):
+    client, _ = make_client(tmp_path)
+    with client:
+        root = client.get("/")
+        rooms = client.get("/rooms")
+        script = client.get("/static/app.js")
+    assert rooms.status_code == 200
+    assert "Observed rooms" in rooms.text and "#lobby" in rooms.text
+    assert 'data-chart="line"' in root.text
+    assert "Observations over time" in root.text
+    assert script.status_code == 200 and "renderCharts" in script.text
+
+
+def test_event_filters_are_get_only_and_preserve_metadata_privacy(tmp_path):
+    client, _ = make_client(tmp_path)
+    with client:
+        filtered = client.get("/events?room=lobby&severity=INFO&flag=DID_PRESENT")
+        invalid = client.get("/events?room=../lobby")
+    assert filtered.status_code == 200
+    assert "Apply filters" in filtered.text
+    assert "did:key:zSynthetic" in filtered.text
+    assert RAW_TEXT not in filtered.text
+    assert invalid.status_code == 422
+
+
 def test_event_metadata_renders_without_raw_message(tmp_path):
     client, _ = make_client(tmp_path)
     with client:

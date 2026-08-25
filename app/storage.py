@@ -81,6 +81,7 @@ class EventStore:
                     coalesce(sum(did_present), 0) AS did_present,
                     coalesce(sum(CASE WHEN did_present = 0 AND signed_identity_present = 0 THEN 1 ELSE 0 END), 0) AS unsigned,
                     coalesce(sum(CASE WHEN severity IN ('MEDIUM', 'HIGH') THEN 1 ELSE 0 END), 0) AS warnings,
+                    coalesce(sum(CASE WHEN severity = 'HIGH' THEN 1 ELSE 0 END), 0) AS high_risk,
                     max(sequence) AS last_sequence,
                     count(DISTINCT room) AS observed_rooms
                 FROM events"""
@@ -99,6 +100,108 @@ class EventStore:
                 (limit,),
             ).fetchall()
         return [self._event_row(row) for row in rows]
+
+    def filtered_events(
+        self,
+        *,
+        room: str | None = None,
+        severity: str | None = None,
+        flag: str | None = None,
+        limit: int = 50,
+        before_id: int | None = None,
+    ) -> tuple[list[dict[str, object]], int | None]:
+        """Return a cursor page for the metadata-only dashboard event table."""
+
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        if severity is not None and severity not in SEVERITY_NAMES:
+            raise ValueError("unknown severity")
+        if flag is not None and flag not in SECURITY_FLAG_NAMES:
+            raise ValueError("unknown security flag")
+        if before_id is not None and before_id <= 0:
+            raise ValueError("before_id must be positive")
+
+        clauses: list[str] = []
+        parameters: list[object] = []
+        if room is not None:
+            clauses.append("room = ?")
+            parameters.append(room)
+        if severity is not None:
+            clauses.append("severity = ?")
+            parameters.append(severity)
+        if flag is not None:
+            clauses.append(
+                "EXISTS (SELECT 1 FROM json_each(events.flags_json) WHERE value = ?)"
+            )
+            parameters.append(flag)
+        if before_id is not None:
+            clauses.append("id < ?")
+            parameters.append(before_id)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        parameters.append(limit + 1)
+
+        with sqlite3.connect(self.path) as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                """SELECT id, observed_at, message_timestamp, room, sequence,
+                    sender_name, did, did_present, signed_identity_present,
+                    flags_json, severity, message_sha256
+                FROM events"""
+                + where
+                + " ORDER BY id DESC LIMIT ?",
+                parameters,
+            ).fetchall()
+
+        has_more = len(rows) > limit
+        selected = rows[:limit]
+        events = [self._event_row(row) for row in selected]
+        next_before_id = int(selected[-1]["id"]) if has_more and selected else None
+        return events, next_before_id
+
+    def dashboard_charts(
+        self, hours: int = 24, *, generated_at: datetime | None = None
+    ) -> dict[str, object]:
+        """Return read-only chart aggregates without changing storage semantics."""
+
+        if hours != 24:
+            raise ValueError("dashboard charts currently use a 24-hour window")
+        selected_time = (generated_at or datetime.now(UTC)).astimezone(UTC)
+        end_hour = selected_time.replace(minute=0, second=0, microsecond=0)
+        start = end_hour - timedelta(hours=24)
+        bucket_seconds = 4 * 60 * 60
+        bounds = (start.isoformat(), selected_time.isoformat())
+
+        with sqlite3.connect(self.path) as connection:
+            connection.row_factory = sqlite3.Row
+            time_rows = connection.execute(
+                """SELECT
+                    (CAST(strftime('%s', observed_at) AS INTEGER) / ?) * ? AS bucket,
+                    count(*) AS observations
+                FROM events
+                WHERE observed_at >= ? AND observed_at <= ?
+                GROUP BY bucket ORDER BY bucket""",
+                (bucket_seconds, bucket_seconds, *bounds),
+            ).fetchall()
+
+        by_bucket = {int(row["bucket"]): int(row["observations"]) for row in time_rows}
+        series = []
+        for offset in range(0, 25, 4):
+            point = start + timedelta(hours=offset)
+            epoch = int(point.timestamp()) // bucket_seconds * bucket_seconds
+            series.append({"label": point.strftime("%H:%M"), "value": by_bucket.get(epoch, 0)})
+
+        report = self.security_report(hours, generated_at=selected_time)
+        severity = report["severity"]
+        assert isinstance(severity, dict)
+        return {
+            "period_hours": hours,
+            "observations": series,
+            "severity": [
+                {"label": name.upper(), "value": int(severity[name])}
+                for name in ("high", "medium", "low", "info", "none")
+            ],
+            "top_flagged_rooms": report["top_flagged_rooms"],
+        }
 
     def event_by_id(self, event_id: int) -> dict[str, object] | None:
         with sqlite3.connect(self.path) as connection:

@@ -157,6 +157,16 @@ Then open `http://127.0.0.1:8787/`. Do not change the bind address for an
 internet-facing deployment without completing a separate security and deployment
 review.
 
+## Dashboard
+
+The server-rendered dashboard provides a responsive dark observability interface
+with live metadata totals, 24-hour activity and severity charts, filtered event
+views, observed-room summaries, runtime health, and links to the read-only API.
+Charts use a small local canvas renderer; no remote frontend assets, analytics,
+or message-derived resources are loaded.
+
+![Technocore Watchtower security dashboard](docs/dashboard.png)
+
 Run the tests and publication checks:
 
 ```bash
@@ -170,19 +180,15 @@ pip-audit
 
 Technocore Watchtower has been successfully deployed as a hardened systemd
 service in a live VPS environment. The systemd unit is not currently distributed
-with this repository. The dashboard remains private and loopback-only in the
-current deployment; there is no public live demo. Docker packaging is not
-currently provided.
+with this repository. The application remains bound to loopback and is published
+through a dedicated Nginx HTTPS reverse proxy at the community-operated instance
+linked above. Docker packaging is not currently provided.
 
 ## Data and privacy
 
 The default database path is `data/watchtower.sqlite3`; database files are ignored
 by Git. The dashboard intentionally has no original-message view. Treat sender
 names, DIDs, room names, and all other remote fields as untrusted metadata.
-
-## Screenshots
-
-Screenshots will be added after the interface and publication process are reviewed.
 
 ## Contributing
 

@@ -3,31 +3,39 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark light">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#080b14">
   <title>{% block title %}Technocore Watchtower{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
 </head>
 <body>
   <header class="site-header">
     <div class="shell header-row">
-      <div>
-        <a class="brand" href="/">Technocore Watchtower</a>
-        <p class="subtitle">Read-only security observability for Technocore</p>
-      </div>
-      <span class="mode-badge" aria-label="Operating mode: read only">READ-ONLY MONITOR</span>
+      <a class="brand-lockup" href="/" aria-label="Technocore Watchtower overview">
+        <span class="brand-mark" aria-hidden="true"><span></span></span>
+        <span><strong>Technocore Watchtower</strong><small>Read-only security observability for Technocore</small></span>
+      </a>
+      <nav class="primary-nav" aria-label="Primary navigation">
+        <a href="/"{% if current_path == "/" %} class="active" aria-current="page"{% endif %}>Overview</a>
+        <a href="/events"{% if current_path.startswith("/events") %} class="active" aria-current="page"{% endif %}>Events</a>
+        <a href="/rooms"{% if current_path == "/rooms" %} class="active" aria-current="page"{% endif %}>Rooms</a>
+        <a href="/api/v1/summary?hours=24">API</a>
+        <a href="/health">Health</a>
+      </nav>
+      <span class="operational-badge{% if runtime.last_transport_error %} degraded{% endif %}">
+        <span aria-hidden="true"></span>{{ "Operational" if not runtime.last_transport_error else "Degraded" }}
+      </span>
     </div>
-    <nav class="shell" aria-label="Primary navigation">
-      <a href="/">Overview</a>
-      <a href="/events">Events</a>
-      <a href="/health">Health JSON</a>
-    </nav>
   </header>
   <main class="shell">
     {% block content %}{% endblock %}
   </main>
-  <footer class="shell">
-    Independent community security tool. Not an official FLOP Labs service.
-    Message bodies are not retained.
+  <footer>
+    <div class="shell footer-row">
+      <span>Technocore Watchtower</span>
+      <span>Independent community security tool · Message bodies are not retained</span>
+    </div>
   </footer>
 </body>
 </html>

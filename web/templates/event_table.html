@@ -1,22 +1,22 @@
 {% if events %}
 <div class="table-wrap">
-  <table>
-    <thead><tr><th>Time</th><th>Room</th><th>Sequence</th><th>Sender</th><th>Identity status</th><th>Severity</th><th>Flags</th></tr></thead>
+  <table class="events-table">
+    <thead><tr><th>Time</th><th>Room</th><th>Sequence</th><th>Sender</th><th>Identity status</th><th>Flags</th><th>Severity</th></tr></thead>
     <tbody>
     {% for event in events %}
       <tr>
-        <td><a href="/events/{{ event.id }}">{{ event.message_timestamp }}</a></td>
-        <td><span class="room">#{{ event.room }}</span></td>
-        <td>{{ event.sequence }}</td>
-        <td class="sender">{{ event.sender_name }}</td>
-        <td><span class="identity">{{ event.identity_status }}</span></td>
-        <td><span class="severity severity-{{ event.severity|lower }}">{{ event.severity }}</span></td>
-        <td>{% if event.flags %}{% for flag in event.flags %}<span class="flag">{{ flag }}</span>{% endfor %}{% else %}<span class="muted">None</span>{% endif %}</td>
+        <td><a class="event-time" href="/events/{{ event.id }}">{{ event.message_timestamp }}</a></td>
+        <td><span class="room-badge">#{{ event.room }}</span></td>
+        <td><code class="sequence">{{ event.sequence }}</code></td>
+        <td class="sender"><strong>{{ event.sender_name }}</strong>{% if event.did %}<span class="did-preview" title="{{ event.did }}">{{ event.did }}</span>{% endif %}</td>
+        <td><span class="identity identity-{{ 'signed' if event.signed_identity_present else ('did' if event.did_present else 'unsigned') }}"><span aria-hidden="true"></span>{{ event.identity_status }}</span></td>
+        <td class="flags-cell">{% if event.flags %}{% for flag in event.flags %}<span class="flag">{{ flag }}</span>{% endfor %}{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td><span class="severity severity-{{ event.severity|lower }}"><span aria-hidden="true"></span>{{ event.severity }}</span></td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
 </div>
 {% else %}
-<p class="empty">No observations yet. Watchtower will show metadata here after a successful configured-room read.</p>
+<div class="empty-state"><span aria-hidden="true">◇</span><h3>No matching observations</h3><p>Watchtower will display metadata after a configured-room observation matches this view.</p></div>
 {% endif %}

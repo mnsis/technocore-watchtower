@@ -96,6 +96,7 @@ def create_app(settings: DashboardSettings | None = None) -> FastAPI:
     def context(request: Request) -> dict[str, object]:
         return {
             "request": request,
+            "current_path": request.url.path,
             "runtime": runtime_state.snapshot(),
             "summary": store.dashboard_summary(),
         }
@@ -105,15 +106,59 @@ def create_app(settings: DashboardSettings | None = None) -> FastAPI:
         return templates.TemplateResponse(
             request=request,
             name="dashboard.html",
-            context={**context(request), "events": store.recent_events(10), "rooms": store.observed_rooms()},
+            context={
+                **context(request),
+                "events": store.recent_events(10),
+                "rooms": store.api_room_summaries(),
+                "charts": store.dashboard_charts(),
+            },
         )
 
     @dashboard.get("/events", response_class=HTMLResponse)
-    async def events(request: Request):
+    async def events(
+        request: Request,
+        room: str | None = None,
+        severity: str | None = None,
+        flag: str | None = None,
+        before_id: int | None = Query(default=None, ge=1),
+    ):
+        selected_room = validated_room(room) if room else None
+        selected_severity = severity.upper() if severity else None
+        if selected_severity is not None and selected_severity not in SEVERITY_NAMES:
+            raise HTTPException(status_code=422, detail="unknown severity")
+        selected_flag = flag.upper() if flag else None
+        if selected_flag is not None and selected_flag not in SECURITY_FLAG_NAMES:
+            raise HTTPException(status_code=422, detail="unknown security flag")
+        selected_events, next_before_id = store.filtered_events(
+            room=selected_room,
+            severity=selected_severity,
+            flag=selected_flag,
+            before_id=before_id,
+        )
         return templates.TemplateResponse(
             request=request,
             name="events.html",
-            context={**context(request), "events": store.recent_events(100)},
+            context={
+                **context(request),
+                "events": selected_events,
+                "next_before_id": next_before_id,
+                "filters": {
+                    "room": selected_room,
+                    "severity": selected_severity,
+                    "flag": selected_flag,
+                },
+                "room_options": store.api_room_summaries(),
+                "severity_options": SEVERITY_NAMES,
+                "flag_options": SECURITY_FLAG_NAMES,
+            },
+        )
+
+    @dashboard.get("/rooms", response_class=HTMLResponse)
+    async def rooms(request: Request):
+        return templates.TemplateResponse(
+            request=request,
+            name="rooms.html",
+            context={**context(request), "rooms": store.api_room_summaries()},
         )
 
     @dashboard.get("/events/{event_id}", response_class=HTMLResponse)

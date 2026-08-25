@@ -1,18 +1,36 @@
 {% extends "base.html" %}
 {% block title %}Event {{ event.id }} · Technocore Watchtower{% endblock %}
 {% block content %}
-<section class="page-intro"><div><p class="eyebrow">OBSERVATION {{ event.id }}</p><h1>Event metadata</h1><p>No raw message content is retained or available from this page.</p></div><span class="severity severity-{{ event.severity|lower }}">{{ event.severity }}</span></section>
-<section class="panel detail-grid" aria-label="Event metadata">
-  <div><span>Message timestamp</span><strong>{{ event.message_timestamp }}</strong></div>
-  <div><span>Observed timestamp</span><strong>{{ event.observed_at }}</strong></div>
-  <div><span>Room</span><strong>#{{ event.room }}</strong></div>
-  <div><span>Sequence</span><strong>{{ event.sequence }}</strong></div>
-  <div><span>Observed nickname</span><strong>{{ event.sender_name }}</strong></div>
-  <div><span>Identity status</span><strong>{{ event.identity_status }}</strong></div>
-  <div><span>DID metadata</span><strong class="breakable">{{ event.did or "Not present" }}</strong></div>
-  <div><span>Signed identity metadata</span><strong>{{ "Present" if event.signed_identity_present else "Not present" }}</strong></div>
-  <div class="wide"><span>Scanner flags</span><strong>{{ event.flags|join(", ") if event.flags else "None" }}</strong></div>
-  <div class="wide"><span>SHA-256 of original message</span><code class="breakable">{{ event.message_sha256 }}</code></div>
+<section class="page-heading detail-heading">
+  <div><a class="back-link" href="/events">← Back to events</a><span class="section-kicker">OBSERVATION {{ event.id }}</span><h1>Event metadata</h1><p>No raw message content is retained or available from this page.</p></div>
+  <span class="severity severity-large severity-{{ event.severity|lower }}"><span aria-hidden="true"></span>{{ event.severity }}</span>
 </section>
-<p><a href="/events">← Back to events</a></p>
+<section class="detail-layout" aria-label="Event metadata">
+  <article class="panel detail-card detail-primary">
+    <div class="panel-heading"><div><span class="section-kicker">OBSERVATION</span><h2>Core metadata</h2></div></div>
+    <dl class="detail-list">
+      <div><dt>Room</dt><dd><span class="room-badge">#{{ event.room }}</span></dd></div>
+      <div><dt>Sequence</dt><dd><code>{{ event.sequence }}</code></dd></div>
+      <div><dt>Message timestamp</dt><dd>{{ event.message_timestamp }}</dd></div>
+      <div><dt>Observed timestamp</dt><dd>{{ event.observed_at }}</dd></div>
+      <div><dt>Observed sender</dt><dd>{{ event.sender_name }}</dd></div>
+    </dl>
+  </article>
+  <article class="panel detail-card">
+    <div class="panel-heading"><div><span class="section-kicker">IDENTITY</span><h2>Identity metadata</h2></div></div>
+    <dl class="detail-list">
+      <div><dt>Status</dt><dd><span class="identity identity-{{ 'signed' if event.signed_identity_present else ('did' if event.did_present else 'unsigned') }}"><span aria-hidden="true"></span>{{ event.identity_status }}</span></dd></div>
+      <div><dt>Signed metadata</dt><dd>{{ "Present" if event.signed_identity_present else "Not present" }}</dd></div>
+      <div class="detail-wide"><dt>DID</dt><dd><code class="breakable">{{ event.did or "Not present" }}</code></dd></div>
+    </dl>
+  </article>
+  <article class="panel detail-card detail-wide-card">
+    <div class="panel-heading"><div><span class="section-kicker">SECURITY SIGNALS</span><h2>Classification</h2></div></div>
+    <dl class="detail-list">
+      <div><dt>Severity</dt><dd><span class="severity severity-{{ event.severity|lower }}"><span aria-hidden="true"></span>{{ event.severity }}</span></dd></div>
+      <div><dt>Scanner flags</dt><dd>{% if event.flags %}{% for flag in event.flags %}<span class="flag">{{ flag }}</span>{% endfor %}{% else %}<span class="muted">—</span>{% endif %}</dd></div>
+      <div class="detail-wide"><dt>SHA-256 message hash</dt><dd><code class="breakable hash-value">{{ event.message_sha256 }}</code></dd></div>
+    </dl>
+  </article>
+</section>
 {% endblock %}
