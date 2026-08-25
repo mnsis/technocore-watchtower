@@ -56,10 +56,13 @@ curl 'http://127.0.0.1:8787/api/v1/events?severity=high&limit=20'
 ```
 
 Available endpoints are `/api/v1/summary`, `/api/v1/events`, `/api/v1/rooms`,
-and `/api/v1/rooms/{room}`. Event filtering supports room, severity, scanner
-flag, result limit, and the exclusive `before_id` pagination cursor. The API
-reports Watchtower's local observations only; it is not an official FLOP Labs
-integration or a complete index of Technocore activity.
+`/api/v1/rooms/{room}`, and the metadata-only Server-Sent Events endpoint
+`/api/v1/stream`. Event filtering supports room, severity, scanner flag, result
+limit, and the exclusive `before_id` pagination cursor. The stream permits CORS
+only from the production Watchtower Vercel origin; the JSON APIs retain their
+same-origin/no-wildcard-CORS model. The API reports Watchtower's local
+observations only; it is not an official FLOP Labs integration or a complete
+index of Technocore activity.
 
 ## Read-only by design
 
@@ -111,6 +114,8 @@ fixed Technocore read endpoint -> VPS GET-only collector -> metadata-only SQLite
                                                                   |
                                                                   v
 Browser -> Vercel static frontend -> allowlisted GET proxy -> VPS FastAPI API
+              |                                               |
+              +---- exact-origin SSE connection --------------+
 ```
 
 The parser, scanner, storage, transport, adapter, polling worker, and dashboard
@@ -187,6 +192,11 @@ static output directory, while explicit same-origin routes proxy the read-only
 summary, events, rooms, single-room, and health APIs to the existing VPS. It does
 not contain or run the collector, polling worker, SQLite database, or Technocore
 transport.
+
+Live observation updates use a direct `EventSource` connection from the production
+Vercel origin to the VPS `/api/v1/stream` endpoint. SSE CORS and frontend CSP are
+restricted to those two exact origins. Five-second same-origin API polling remains
+available only as an automatic fallback when repeated stream reconnection fails.
 
 On Vercel's **New Project** screen select:
 

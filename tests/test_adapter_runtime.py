@@ -129,6 +129,30 @@ def test_poll_worker_uses_allowlist_and_never_fetches_message_url(tmp_path, monk
     assert store.dashboard_summary()["total"] == 1
 
 
+def test_poll_worker_publishes_only_newly_persisted_metadata(tmp_path):
+    payload = {
+        "room": "lobby",
+        "messages": [live_shape_record(text="raw https://message.invalid/private")],
+    }
+    transport = FakeTransport(TransportResult(True, 200, data=payload))
+    store = EventStore(tmp_path / "events.sqlite3")
+    store.initialize()
+    published = []
+    worker = PollingWorker(
+        transport,
+        Watcher(store),
+        RuntimeState(("lobby",)),
+        poll_interval=5,
+        observation_publisher=published.append,
+    )
+    assert asyncio.run(worker.poll_once()) is True
+    assert len(published) == 1
+    assert published[0]["id"] == 1
+    assert "text" not in published[0] and "urls" not in published[0]
+    assert asyncio.run(worker.poll_once()) is True
+    assert len(published) == 1
+
+
 def test_poll_worker_handles_transport_failure_without_retry_loop(tmp_path):
     transport = FakeTransport(
         TransportResult(False, 429, error="rate_limited", retry_after_seconds=30)

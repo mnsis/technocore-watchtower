@@ -3,23 +3,26 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .config import WatchtowerConfig
 from .runtime import PollingWorker, RuntimeState
 from .storage import SECURITY_FLAG_NAMES, SEVERITY_NAMES, EventStore
+from .streaming import EventBroker, StreamEvent
 from .transport import TechnocoreTransport
 from .watcher import Watcher
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+VERCEL_PRODUCTION_ORIGIN = "https://technocore-watchtower.vercel.app"
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +32,8 @@ class DashboardSettings:
     database_path: Path = PROJECT_ROOT / "data" / "watchtower.sqlite3"
     monitored_rooms: tuple[str, ...] = ("lobby", "technocore")
     polling_enabled: bool = False
+    sse_allowed_origin: str = VERCEL_PRODUCTION_ORIGIN
+    sse_heartbeat_seconds: float = 15.0
 
     def __post_init__(self) -> None:
         if self.host != "127.0.0.1":
@@ -39,6 +44,10 @@ class DashboardSettings:
             TechnocoreTransport.validate_room(room)
         if not self.monitored_rooms or len(set(self.monitored_rooms)) != len(self.monitored_rooms):
             raise ValueError("monitored room allowlist must be non-empty and unique")
+        if self.sse_allowed_origin != VERCEL_PRODUCTION_ORIGIN:
+            raise ValueError("SSE CORS origin must remain the production Vercel origin")
+        if not 0.05 <= self.sse_heartbeat_seconds <= 30:
+            raise ValueError("SSE heartbeat must be between 0.05 and 30 seconds")
 
 
 def create_app(settings: DashboardSettings | None = None) -> FastAPI:
@@ -46,9 +55,40 @@ def create_app(settings: DashboardSettings | None = None) -> FastAPI:
     store = EventStore(settings.database_path)
     store.initialize()
     runtime_state = RuntimeState(settings.monitored_rooms)
+
+    def live_security_summary(hours: int) -> dict[str, object]:
+        generated_at = datetime.now(UTC)
+        report = store.security_report(hours, generated_at=generated_at)
+        identity = report["identity"]
+        assert isinstance(identity, dict)
+        return {
+            **report,
+            "identity": {
+                **identity,
+                "did_present": store.did_present_count(
+                    hours, generated_at=generated_at
+                ),
+            },
+        }
+
+    def aggregate_snapshot() -> tuple[dict[str, object], list[dict[str, object]]]:
+        summary = {
+            "api_version": "v1",
+            "monitored_rooms": runtime_state.snapshot()["monitored_rooms"],
+            "stream_through_event_id": store.latest_event_id(),
+            **live_security_summary(24),
+        }
+        return summary, store.api_room_summaries()
+
+    broker = EventBroker(aggregate_snapshot)
     watcher = Watcher(store, WatchtowerConfig())
     transport = TechnocoreTransport()
-    worker = PollingWorker(transport, watcher, runtime_state)
+    worker = PollingWorker(
+        transport,
+        watcher,
+        runtime_state,
+        observation_publisher=broker.publish_observation,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -60,6 +100,7 @@ def create_app(settings: DashboardSettings | None = None) -> FastAPI:
             if task is not None:
                 stop_event.set()
                 await task
+            await broker.close()
 
     dashboard = FastAPI(
         title="Technocore Watchtower",
@@ -77,6 +118,7 @@ def create_app(settings: DashboardSettings | None = None) -> FastAPI:
     dashboard.state.store = store
     dashboard.state.runtime = runtime_state
     dashboard.state.worker = worker
+    dashboard.state.broker = broker
 
     @dashboard.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -100,21 +142,6 @@ def create_app(settings: DashboardSettings | None = None) -> FastAPI:
             "current_path": request.url.path,
             "runtime": runtime_state.snapshot(),
             "summary": store.dashboard_summary(),
-        }
-
-    def live_security_summary(hours: int) -> dict[str, object]:
-        generated_at = datetime.now(UTC)
-        report = store.security_report(hours, generated_at=generated_at)
-        identity = report["identity"]
-        assert isinstance(identity, dict)
-        return {
-            **report,
-            "identity": {
-                **identity,
-                "did_present": store.did_present_count(
-                    hours, generated_at=generated_at
-                ),
-            },
         }
 
     @dashboard.get("/", response_class=HTMLResponse)
@@ -260,6 +287,65 @@ def create_app(settings: DashboardSettings | None = None) -> FastAPI:
         if not summaries:
             raise HTTPException(status_code=404, detail="Observed room not found")
         return {"api_version": "v1", "room": summaries[0]}
+
+    def encode_stream_event(event: StreamEvent) -> str:
+        fields = []
+        if event.event_id is not None:
+            fields.append(f"id: {event.event_id}")
+        fields.append(f"event: {event.event}")
+        fields.append(
+            "data: "
+            + json.dumps(event.data, separators=(",", ":"), ensure_ascii=True)
+        )
+        return "\n".join(fields) + "\n\n"
+
+    @dashboard.get("/api/v1/stream")
+    async def api_stream(request: Request):
+        origin = request.headers.get("origin")
+        if origin is not None and origin != settings.sse_allowed_origin:
+            raise HTTPException(status_code=403, detail="SSE origin not allowed")
+        last_event_id: int | None
+        try:
+            last_event_id = int(request.headers.get("last-event-id", ""))
+            if last_event_id <= 0:
+                last_event_id = None
+        except ValueError:
+            last_event_id = None
+        queue, replay = broker.subscribe(last_event_id)
+
+        async def event_stream():
+            try:
+                for event in replay:
+                    yield encode_stream_event(event)
+                summary, rooms = await asyncio.to_thread(broker.current_aggregates)
+                yield encode_stream_event(StreamEvent("summary", summary))
+                yield encode_stream_event(
+                    StreamEvent("room_update", {"rooms": rooms})
+                )
+                while True:
+                    try:
+                        event = await asyncio.wait_for(
+                            queue.get(), timeout=settings.sse_heartbeat_seconds
+                        )
+                    except TimeoutError:
+                        event = StreamEvent(
+                            "heartbeat",
+                            {"ts": datetime.now(UTC).isoformat().replace("+00:00", "Z")},
+                        )
+                    yield encode_stream_event(event)
+            finally:
+                broker.unsubscribe(queue)
+
+        headers = {
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        }
+        if origin == settings.sse_allowed_origin:
+            headers["Access-Control-Allow-Origin"] = origin
+            headers["Vary"] = "Origin"
+        return StreamingResponse(
+            event_stream(), media_type="text/event-stream", headers=headers
+        )
 
     return dashboard
 

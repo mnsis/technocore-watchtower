@@ -89,6 +89,8 @@ h1, h2, h3 { color: var(--text); letter-spacing: -.03em; }
 .live-freshness.pending .live-label i { background: var(--faint); box-shadow: none; }
 .live-freshness.reconnecting .live-label { color: var(--amber); }
 .live-freshness.reconnecting .live-label i { background: var(--amber); box-shadow: none; }
+.live-freshness.fallback .live-label { color: var(--blue); }
+.live-freshness.fallback .live-label i { background: var(--blue); box-shadow: none; }
 .page-status { display: flex; align-items: flex-end; flex-direction: column; gap: 9px; }
 .metric-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
 .metric-card { position: relative; overflow: hidden; min-height: 126px; display: flex; align-items: flex-start; gap: 14px; padding: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(145deg, rgba(20, 28, 45, .9), rgba(14, 20, 33, .9)); }

@@ -279,23 +279,32 @@ class EventStore:
 
         has_more = len(rows) > limit
         selected = rows[:limit]
-        events = [
-            {
-                "id": row["id"],
-                "timestamp": row["message_timestamp"],
-                "room": row["room"],
-                "sequence": row["sequence"],
-                "sender": row["sender_name"],
-                "did": row["did"],
-                "signed_identity_present": bool(row["signed_identity_present"]),
-                "severity": row["severity"],
-                "flags": json.loads(row["flags_json"]),
-                "message_hash": row["message_sha256"],
-            }
-            for row in selected
-        ]
+        events = [self._api_event_row(row) for row in selected]
         next_before_id = int(selected[-1]["id"]) if has_more and selected else None
         return events, next_before_id
+
+    def api_event_by_room_sequence(
+        self, room: str, sequence: int
+    ) -> dict[str, object] | None:
+        """Return one persisted metadata event in the public API shape."""
+
+        with sqlite3.connect(self.path) as connection:
+            connection.row_factory = sqlite3.Row
+            row = connection.execute(
+                """SELECT id, message_timestamp, room, sequence, sender_name,
+                    did, signed_identity_present, severity, flags_json,
+                    message_sha256
+                FROM events WHERE room = ? AND sequence = ?""",
+                (room, sequence),
+            ).fetchone()
+        return self._api_event_row(row) if row is not None else None
+
+    def latest_event_id(self) -> int:
+        """Return the latest persisted event id for stream snapshot coordination."""
+
+        with sqlite3.connect(self.path) as connection:
+            row = connection.execute("SELECT coalesce(max(id), 0) FROM events").fetchone()
+        return int(row[0]) if row is not None else 0
 
     def api_room_summaries(self, room: str | None = None) -> list[dict[str, object]]:
         """Return aggregate metadata for all observed rooms or one room."""
@@ -470,3 +479,18 @@ class EventStore:
         else:
             data["identity_status"] = "UNSIGNED"
         return data
+
+    @staticmethod
+    def _api_event_row(row: sqlite3.Row) -> dict[str, object]:
+        return {
+            "id": row["id"],
+            "timestamp": row["message_timestamp"],
+            "room": row["room"],
+            "sequence": row["sequence"],
+            "sender": row["sender_name"],
+            "did": row["did"],
+            "signed_identity_present": bool(row["signed_identity_present"]),
+            "severity": row["severity"],
+            "flags": json.loads(row["flags_json"]),
+            "message_hash": row["message_sha256"],
+        }

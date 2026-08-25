@@ -4,6 +4,9 @@
   const POLL_INTERVAL_MS = 5000;
   const HIDDEN_INTERVAL_MS = 30000;
   const REQUEST_TIMEOUT_MS = 4000;
+  const SSE_FAILURES_BEFORE_FALLBACK = 3;
+  const roomState = new Map();
+  let appliedEventId = 0;
 
   function element(tagName, className, text) {
     const node = document.createElement(tagName);
@@ -250,6 +253,8 @@
   function updateRooms(rooms) {
     const region = document.querySelector("[data-live-room-region]");
     if (!region || !Array.isArray(rooms)) return;
+    roomState.clear();
+    rooms.forEach((room) => roomState.set(String(room.room || ""), room));
     setText("[data-live-room-count]", rooms.length);
     if (!rooms.length) {
       if (!region.querySelector(".empty-state")) region.replaceChildren(createRoomEmptyState());
@@ -285,6 +290,76 @@
       if (value) query.set(name, value);
     });
     return `/api/v1/events?${query.toString()}`;
+  }
+
+  function observationMatchesFilters(observation) {
+    const query = new URLSearchParams(window.location.search);
+    const room = query.get("room");
+    const severity = query.get("severity");
+    const flag = query.get("flag");
+    return (!room || observation.room === room)
+      && (!severity || String(observation.severity).toUpperCase() === severity.toUpperCase())
+      && (!flag || (Array.isArray(observation.flags) && observation.flags.includes(flag)));
+  }
+
+  function prependObservation(observation) {
+    const container = document.querySelector("[data-live-event-container]");
+    if (!container || !observationMatchesFilters(observation)) return;
+    let table = container.querySelector("table");
+    if (!table) {
+      container.replaceChildren(createEventTable());
+      table = container.querySelector("table");
+    }
+    const body = table.querySelector("tbody");
+    const id = String(integer(observation.id));
+    if (body.querySelector(`[data-event-id="${id}"]`)) return;
+    body.prepend(createEventRow(observation));
+    const limit = integer(document.querySelector("[data-live-event-region]")?.dataset.liveEventLimit) || 20;
+    Array.from(body.children).slice(limit).forEach((row) => row.remove());
+  }
+
+  function incrementMetric(name) {
+    const node = document.querySelector(`[data-live-metric="${name}"]`);
+    if (!node) return;
+    node.textContent = String(integer(node.textContent) + 1);
+  }
+
+  function incrementObservation(observation) {
+    const eventId = integer(observation.id);
+    if (eventId <= appliedEventId) return;
+    appliedEventId = eventId;
+    incrementMetric("observations");
+    if (typeof observation.did === "string" && observation.did.startsWith("did:key:")) incrementMetric("did-present");
+    if (!observation.signed_identity_present) incrementMetric("unsigned");
+    if (String(observation.severity).toUpperCase() === "HIGH") incrementMetric("high-risk");
+
+    const severityName = String(observation.severity || "NONE").toUpperCase();
+    const severityPoint = document.querySelector(`[data-live-chart="severity"] [data-label="${severityName}"]`);
+    if (severityPoint) {
+      severityPoint.dataset.value = String(integer(severityPoint.dataset.value) + 1);
+      severityPoint.textContent = `${severityName}: ${severityPoint.dataset.value}`;
+      if (typeof window.renderCharts === "function") window.renderCharts();
+    }
+
+    const roomName = String(observation.room || "");
+    const current = roomState.get(roomName);
+    if (current) {
+      const updated = {
+        ...current,
+        observations: integer(current.observations) + 1,
+        last_sequence: integer(observation.sequence),
+        last_seen: observation.timestamp,
+        severity: { ...current.severity },
+      };
+      const level = String(observation.severity || "NONE").toLowerCase();
+      updated.severity[level] = integer(updated.severity[level]) + 1;
+      const riskFlags = ["UNSIGNED_PRIVILEGED_NAME", "POTENTIAL_TECHNOCORE_WRITE_URL", "SUSPICIOUS_COMBINATION"];
+      if (Array.isArray(observation.flags) && observation.flags.some((flag) => riskFlags.includes(flag))) {
+        updated.flagged_events = integer(current.flagged_events) + 1;
+      }
+      roomState.set(roomName, updated);
+      updateRooms(Array.from(roomState.values()).sort((left, right) => String(left.room).localeCompare(String(right.room))));
+    }
   }
 
   function syncEventFilters() {
@@ -348,19 +423,29 @@
       this.request = request;
       this.running = false;
       this.failures = 0;
-      this.lastSuccess = null;
       this.timer = null;
-      this.statusTimer = null;
+      this.controller = null;
+      this.active = false;
       this.visibilityChanged = this.visibilityChanged.bind(this);
     }
 
     start() {
+      if (this.active) return;
+      this.active = true;
       document.addEventListener("visibilitychange", this.visibilityChanged);
-      this.statusTimer = window.setInterval(() => this.updateStatusAge(), 1000);
       this.refresh();
     }
 
+    stop() {
+      if (!this.active) return;
+      this.active = false;
+      window.clearTimeout(this.timer);
+      if (this.controller) this.controller.abort();
+      document.removeEventListener("visibilitychange", this.visibilityChanged);
+    }
+
     schedule(delay = this.nextDelay()) {
+      if (!this.active) return;
       window.clearTimeout(this.timer);
       this.timer = window.setTimeout(() => this.refresh(), delay);
     }
@@ -376,18 +461,18 @@
         return;
       }
       this.running = true;
-      const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      this.controller = new AbortController();
+      const timeout = window.setTimeout(() => this.controller.abort(), REQUEST_TIMEOUT_MS);
       try {
-        await this.request(controller.signal);
+        await this.request(this.controller.signal);
         this.failures = 0;
-        this.lastSuccess = Date.now();
-        this.setStatus(true);
+        setConnectionStatus("fallback");
       } catch (_) {
         this.failures += 1;
-        this.setStatus(false);
+        if (this.active) setConnectionStatus("reconnecting");
       } finally {
         window.clearTimeout(timeout);
+        this.controller = null;
         this.running = false;
         this.schedule();
       }
@@ -403,36 +488,100 @@
       }
     }
 
-    setStatus(connected) {
-      document.querySelectorAll("[data-live-status]").forEach((status) => {
-        status.classList.remove("pending");
-        status.classList.toggle("reconnecting", !connected);
-        const label = status.querySelector(".live-label");
-        if (label) label.lastChild.textContent = connected ? " LIVE" : " Reconnecting…";
-      });
-      this.updateStatusAge();
+  }
+
+  let lastObservationAt = null;
+
+  function setConnectionStatus(mode) {
+    const labels = {
+      streaming: " LIVE",
+      fallback: " Live fallback",
+      reconnecting: " Reconnecting…",
+    };
+    document.querySelectorAll("[data-live-status]").forEach((status) => {
+      status.classList.remove("pending");
+      status.classList.toggle("reconnecting", mode === "reconnecting");
+      status.classList.toggle("fallback", mode === "fallback");
+      const label = status.querySelector(".live-label");
+      if (label) label.lastChild.textContent = labels[mode];
+    });
+    if (mode === "streaming" && lastObservationAt === null) {
+      setText("[data-live-updated]", "Streaming");
+    }
+  }
+
+  function updateObservationAge() {
+    if (lastObservationAt === null) return;
+    const seconds = Math.max(0, (Date.now() - lastObservationAt) / 1000);
+    const label = seconds < 10 ? seconds.toFixed(1) : String(Math.floor(seconds));
+    setText("[data-live-updated]", `Last event: ${label}s ago`);
+  }
+
+  class LiveController {
+    constructor(request) {
+      this.poller = new LivePoller(request);
+      this.source = null;
+      this.failures = 0;
     }
 
-    updateStatusAge() {
-      document.querySelectorAll("[data-live-updated]").forEach((node) => {
-        if (!this.lastSuccess) {
-          node.textContent = this.failures ? "Update temporarily unavailable" : "Waiting for update";
-          return;
-        }
-        const seconds = Math.max(0, Math.floor((Date.now() - this.lastSuccess) / 1000));
-        node.textContent = `Updated ${seconds}s ago`;
+    start() {
+      window.setInterval(updateObservationAge, 250);
+      if (typeof window.EventSource !== "function") {
+        this.poller.start();
+        return;
+      }
+      const streamUrl = document.body.dataset.streamUrl || "/api/v1/stream";
+      this.source = new EventSource(streamUrl);
+      this.source.onopen = () => {
+        this.failures = 0;
+        this.poller.stop();
+        setConnectionStatus("streaming");
+      };
+      this.source.onerror = () => {
+        this.failures += 1;
+        setConnectionStatus("reconnecting");
+        if (this.failures >= SSE_FAILURES_BEFORE_FALLBACK) this.poller.start();
+      };
+      this.source.addEventListener("observation", (message) => {
+        const observation = parseEventData(message);
+        if (!observation) return;
+        prependObservation(observation);
+        incrementObservation(observation);
+        lastObservationAt = Date.now();
+        updateObservationAge();
       });
+      this.source.addEventListener("summary", (message) => {
+        const summary = parseEventData(message);
+        if (!summary) return;
+        appliedEventId = Math.max(appliedEventId, integer(summary.stream_through_event_id));
+        updateMetrics(summary);
+        updateCharts(summary);
+      });
+      this.source.addEventListener("room_update", (message) => {
+        const update = parseEventData(message);
+        if (update && Array.isArray(update.rooms)) updateRooms(update.rooms);
+      });
+    }
+  }
+
+  function parseEventData(message) {
+    try {
+      const value = JSON.parse(message.data);
+      return value && typeof value === "object" ? value : null;
+    } catch (_) {
+      return null;
     }
   }
 
   syncEventFilters();
   const request = liveRequest();
-  if (request) new LivePoller(request).start();
+  if (request) new LiveController(request).start();
 
   window.WatchtowerLive = Object.freeze({
     POLL_INTERVAL_MS,
     HIDDEN_INTERVAL_MS,
     updateEvents,
     updateRooms,
+    prependObservation,
   });
 })();

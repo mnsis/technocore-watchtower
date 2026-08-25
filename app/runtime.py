@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -67,6 +68,7 @@ class PollingWorker:
         long_poll_wait: int = 2,
         batch_limit: int = 5,
         max_backoff: float = 120.0,
+        observation_publisher: Callable[[dict[str, object]], None] | None = None,
     ) -> None:
         if not 5 <= poll_interval <= 3600:
             raise ValueError("poll_interval must be between 5 and 3600 seconds")
@@ -79,6 +81,7 @@ class PollingWorker:
         self.long_poll_wait = long_poll_wait
         self.batch_limit = max(1, min(batch_limit, 20))
         self.max_backoff = max(10.0, min(max_backoff, 300.0))
+        self.observation_publisher = observation_publisher
         self._last_sequences = {room: 0 for room in state.monitored_rooms}
         self._retry_after_hint = 0
 
@@ -105,6 +108,15 @@ class PollingWorker:
                 return adapt_room_response(payload, selected_room)
 
             processed = self.watcher.process_transport_result(result, adapter)
+            if self.observation_publisher is not None:
+                for event, inserted in processed:
+                    if not inserted:
+                        continue
+                    stored = self.watcher.store.api_event_by_room_sequence(
+                        event.message.room, event.message.sequence
+                    )
+                    if stored is not None:
+                        self.observation_publisher(stored)
             if processed:
                 self._last_sequences[room] = max(
                     event.message.sequence for event, _ in processed

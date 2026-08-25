@@ -41,14 +41,24 @@ def test_vercel_browser_assets_use_relative_api_paths_and_safe_dom_updates():
         for name in ("index.html", "events.html", "rooms.html")
     )
     live_script = (PROJECT_ROOT / "web" / "static" / "live.js").read_text()
-    assert BACKEND_ORIGIN not in pages
     assert BACKEND_ORIGIN not in live_script
+    assert pages.count(
+        f'data-stream-url="{BACKEND_ORIGIN}/api/v1/stream"'
+    ) == 3
     assert 'fetchJson("/api/v1/summary?hours=24"' in live_script
     assert 'fetchJson("/api/v1/events?limit=20"' in live_script
     assert 'fetchJson("/api/v1/rooms"' in live_script
     assert ".textContent" in live_script
     assert ".innerHTML" not in live_script
     assert "data-static-frontend" in pages
+    config = json.loads((VERCEL_ROOT / "vercel.json").read_text())
+    csp = next(
+        header["value"]
+        for rule in config["headers"]
+        for header in rule["headers"]
+        if header["key"] == "Content-Security-Policy"
+    )
+    assert f"connect-src 'self' {BACKEND_ORIGIN}" in csp
 
 
 def test_vercel_proxy_is_allowlisted_and_rejects_write_methods():

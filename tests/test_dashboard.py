@@ -74,6 +74,10 @@ def test_live_script_uses_safe_read_only_non_overlapping_polling():
     assert 'document.addEventListener("visibilitychange"' in script
     assert "Promise.allSettled" in script
     assert 'method: "GET"' in script
+    assert "new EventSource(streamUrl)" in script
+    assert "SSE_FAILURES_BEFORE_FALLBACK = 3" in script
+    assert "this.poller.start()" in script
+    assert "this.poller.stop()" in script
     assert ".textContent" in script
     assert ".innerHTML" not in script
 
