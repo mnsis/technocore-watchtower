@@ -202,9 +202,34 @@ def test_optional_shadow_report_is_internal_and_metadata_only(tmp_path):
 
 
 def test_shadow_cli_flags_are_explicit():
-    args = build_parser().parse_args(["--risk-shadow", "--backfill-risk-shadow"])
+    args = build_parser().parse_args(
+        ["--risk-shadow", "--backfill-risk-shadow", "--risk-v2"]
+    )
     assert args.risk_shadow
     assert args.backfill_risk_shadow
+    assert args.risk_v2
+
+
+def test_private_risk_v2_diagnostic_renders_comparison(tmp_path):
+    store = make_store(tmp_path)
+    Watcher(store).process(
+        {
+            "room": "lobby",
+            "sequence": 1,
+            "timestamp": NOW.isoformat(),
+            "sender_name": "alice",
+            "text": "private diagnostic fixture",
+        }
+    )
+    result = report(store)
+    result["risk_v2_diagnostics"] = store.risk_v2_diagnostics(
+        24, generated_at=NOW
+    )
+    rendered = render_human(result)
+    assert "Risk v2 private diagnostic" in rendered
+    assert "Disagreements: 0" in rendered
+    assert "NONE       -> NONE" in rendered
+    assert "private diagnostic fixture" not in rendered
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "1.5", "not-a-number"])

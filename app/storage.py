@@ -519,6 +519,137 @@ class EventStore:
             ],
         }
 
+    def risk_v2_diagnostics(
+        self,
+        hours: int = 24,
+        *,
+        generated_at: datetime | None = None,
+        engine_version: str = ENGINE_VERSION,
+        recent_limit: int = 20,
+    ) -> dict[str, object]:
+        """Return a private metadata-only production/shadow comparison."""
+
+        if isinstance(hours, bool) or not isinstance(hours, int) or hours <= 0:
+            raise ValueError("hours must be a positive integer")
+        if not 1 <= recent_limit <= 100:
+            raise ValueError("recent_limit must be between 1 and 100")
+        selected_time = generated_at or datetime.now(UTC)
+        if selected_time.tzinfo is None or selected_time.utcoffset() is None:
+            raise ValueError("generated_at must be timezone-aware")
+        selected_time = selected_time.astimezone(UTC)
+        cutoff = selected_time - timedelta(hours=hours)
+        bounds = (cutoff.isoformat(), selected_time.isoformat(), engine_version)
+        with sqlite3.connect(self.path) as connection:
+            matrix_rows = connection.execute(
+                """SELECT e.severity, r.shadow_classification, count(*)
+                FROM events e JOIN risk_evaluations r ON r.event_id = e.id
+                WHERE e.observed_at >= ? AND e.observed_at <= ?
+                  AND r.engine_version = ?
+                GROUP BY e.severity, r.shadow_classification
+                ORDER BY e.severity, r.shadow_classification""",
+                bounds,
+            ).fetchall()
+            signal_rows = connection.execute(
+                """SELECT s.code, count(*) AS events, sum(s.points) AS points
+                FROM event_signals s JOIN events e ON e.id = s.event_id
+                WHERE e.observed_at >= ? AND e.observed_at <= ?
+                  AND s.engine_version = ?
+                GROUP BY s.code ORDER BY events DESC, s.code LIMIT 10""",
+                bounds,
+            ).fetchall()
+            score_rows = connection.execute(
+                """SELECT r.score, r.shadow_classification, count(*)
+                FROM risk_evaluations r JOIN events e ON e.id = r.event_id
+                WHERE e.observed_at >= ? AND e.observed_at <= ?
+                  AND r.engine_version = ?
+                GROUP BY r.score, r.shadow_classification
+                ORDER BY r.score DESC, r.shadow_classification LIMIT 10""",
+                bounds,
+            ).fetchall()
+            recent_rows = connection.execute(
+                """SELECT e.id, e.room, e.sequence, e.severity,
+                    r.score, r.shadow_classification, r.engine_version,
+                    r.gate_explanation,
+                    coalesce((
+                        SELECT group_concat(code, ',') FROM (
+                            SELECT code FROM event_signals s
+                            WHERE s.event_id = e.id
+                              AND s.engine_version = r.engine_version
+                              AND s.points > 0 ORDER BY code
+                        )
+                    ), '') AS signal_codes
+                FROM events e JOIN risk_evaluations r ON r.event_id = e.id
+                WHERE e.observed_at >= ? AND e.observed_at <= ?
+                  AND r.engine_version = ? AND r.score > 0
+                ORDER BY e.id DESC LIMIT ?""",
+                (*bounds, recent_limit),
+            ).fetchall()
+            gating_downgrades = int(
+                connection.execute(
+                    """SELECT count(*) FROM risk_evaluations r
+                    JOIN events e ON e.id = r.event_id
+                    WHERE e.observed_at >= ? AND e.observed_at <= ?
+                      AND r.engine_version = ? AND r.gate_explanation IS NOT NULL""",
+                    bounds,
+                ).fetchone()[0]
+            )
+
+        production = {name: 0 for name in SEVERITY_NAMES}
+        shadow_names = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO", "NONE")
+        shadow = {name: 0 for name in shadow_names}
+        matrix = []
+        disagreements = 0
+        for production_name, shadow_name, count in matrix_rows:
+            selected_count = int(count)
+            production[str(production_name)] += selected_count
+            shadow[str(shadow_name)] += selected_count
+            if production_name != shadow_name:
+                disagreements += selected_count
+            matrix.append(
+                {
+                    "production": str(production_name),
+                    "shadow": str(shadow_name),
+                    "events": selected_count,
+                }
+            )
+        return {
+            "engine_version": engine_version,
+            "mode": "private-shadow-diagnostic",
+            "period_hours": hours,
+            "generated_at": selected_time.isoformat().replace("+00:00", "Z"),
+            "production_distribution": production,
+            "shadow_distribution": shadow,
+            "disagreements": disagreements,
+            "disagreement_matrix": matrix,
+            "top_signal_codes": [
+                {"code": str(row[0]), "events": int(row[1]), "points": int(row[2])}
+                for row in signal_rows
+            ],
+            "top_scores": [
+                {
+                    "score": int(row[0]),
+                    "classification": str(row[1]),
+                    "events": int(row[2]),
+                }
+                for row in score_rows
+            ],
+            "recent_elevated": [
+                {
+                    "event_id": int(row[0]),
+                    "room": str(row[1]),
+                    "sequence": int(row[2]),
+                    "production_severity": str(row[3]),
+                    "shadow_score": int(row[4]),
+                    "shadow_classification": str(row[5]),
+                    "engine_version": str(row[6]),
+                    "gate_explanation": str(row[7]) if row[7] is not None else None,
+                    "signal_codes": str(row[8]).split(",") if row[8] else [],
+                }
+                for row in recent_rows
+            ],
+            "gating_downgrades": gating_downgrades,
+        }
+
     def dashboard_summary(self) -> dict[str, int | str | None]:
         with sqlite3.connect(self.path) as connection:
             connection.row_factory = sqlite3.Row

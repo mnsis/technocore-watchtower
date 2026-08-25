@@ -92,6 +92,59 @@ def render_human(report: dict[str, Any]) -> str:
             )
         else:
             lines.append("None")
+    diagnostics = report.get("risk_v2_diagnostics")
+    if isinstance(diagnostics, dict):
+        production = diagnostics["production_distribution"]
+        shadow_distribution = diagnostics["shadow_distribution"]
+        lines.extend(
+            [
+                "",
+                f"Risk v2 private diagnostic ({diagnostics['engine_version']})",
+                f"Disagreements: {diagnostics['disagreements']}",
+                f"Gating downgrades: {diagnostics['gating_downgrades']}",
+                "",
+                "Production severity distribution",
+            ]
+        )
+        lines.extend(f"{name:<10} {production[name]}" for name in production)
+        lines.extend(["", "Shadow severity distribution"])
+        lines.extend(
+            f"{name:<10} {shadow_distribution[name]}" for name in shadow_distribution
+        )
+        lines.extend(["", "Disagreement matrix (production -> shadow)"])
+        matrix = diagnostics["disagreement_matrix"]
+        lines.extend(
+            f"{item['production']:<10} -> {item['shadow']:<10} {item['events']}"
+            for item in matrix
+        )
+        lines.extend(["", "Top risk-v2 signal codes"])
+        signals = diagnostics["top_signal_codes"]
+        if signals:
+            lines.extend(
+                f"{item['code']:<40} {item['events']}" for item in signals
+            )
+        else:
+            lines.append("None")
+        lines.extend(["", "Top risk-v2 scores"])
+        scores = diagnostics["top_scores"]
+        if scores:
+            lines.extend(
+                f"{item['score']:>3} {item['classification']:<10} {item['events']}"
+                for item in scores
+            )
+        else:
+            lines.append("None")
+        lines.extend(["", "Recent elevated shadow evaluations"])
+        elevated = diagnostics["recent_elevated"]
+        if elevated:
+            lines.extend(
+                f"event={item['event_id']} room={item['room']} sequence={item['sequence']} "
+                f"production={item['production_severity']} shadow={item['shadow_classification']} "
+                f"score={item['shadow_score']} signals={','.join(item['signal_codes'])}"
+                for item in elevated
+            )
+        else:
+            lines.append("None")
     return "\n".join(lines) + "\n"
 
 
@@ -105,6 +158,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--risk-shadow",
         action="store_true",
         help="include the internal risk-v2 shadow distribution",
+    )
+    parser.add_argument(
+        "--risk-v2",
+        action="store_true",
+        help="show the private production/risk-v2 comparison diagnostic",
     )
     parser.add_argument(
         "--backfill-risk-shadow",
@@ -123,6 +181,8 @@ def main(argv: list[str] | None = None) -> int:
         store.backfill_shadow_risk()
     if args.risk_shadow or args.backfill_risk_shadow:
         report["risk_v2_shadow"] = store.shadow_risk_report(args.hours)
+    if args.risk_v2:
+        report["risk_v2_diagnostics"] = store.risk_v2_diagnostics(args.hours)
     if args.as_json:
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
     else:

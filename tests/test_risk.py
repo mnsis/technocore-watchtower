@@ -171,6 +171,36 @@ def test_name_normalization_and_bounded_matching(name, normalized, match):
     assert protected_name_match(name) is match
 
 
+def test_fuzzy_boundary_signed_protected_name_and_high_gate_edges():
+    engine = RiskEngine()
+    assert protected_name_match("officialx") is ProtectedNameMatch.CONFUSABLE
+    assert protected_name_match("officxxl") is ProtectedNameMatch.NONE
+    signed = engine.event_evidence(
+        sender_name="admin",
+        did_present=True,
+        signed_identity_present=True,
+        write_capable_route=False,
+    )
+    assert signed.protected_name_match is ProtectedNameMatch.NONE
+    assert engine.evaluate(signed).classification is ShadowClassification.INFO
+    classification, explanation = engine._classify(
+        score=85, informational=False, family_count=1, temporal_corroboration=True
+    )
+    assert classification is ShadowClassification.MEDIUM
+    assert explanation == "HIGH requires at least two independent risk families."
+    classification, explanation = engine._classify(
+        score=85, informational=False, family_count=2, temporal_corroboration=False
+    )
+    assert classification is ShadowClassification.HIGH
+    assert explanation == "CRITICAL requires recent temporal corroboration."
+    critical = engine.evaluate(
+        evidence(match=ProtectedNameMatch.EXACT, write=True),
+        HistoricalContext(repeated_equivalent_signal_count=2),
+    )
+    assert critical.score == 85
+    assert critical.classification is ShadowClassification.CRITICAL
+
+
 def message(sequence, *, sender="alice", text="hello", room="lobby", minute=0, did=None):
     return {
         "room": room,
@@ -281,6 +311,100 @@ def test_signal_propagation_and_qualified_burst_use_bounded_source_time_context(
     assert burst_context["activity_burst_threshold"] == 10
     assert burst_context["collector_coverage_sufficient"] is True
     assert burst_context["qualified_activity_burst"] is True
+
+
+def test_burst_threshold_boundary_with_and_without_base_evidence(tmp_path):
+    store = EventStore(tmp_path / "events.sqlite3")
+    store.initialize()
+    watcher = Watcher(store)
+    for sequence in range(1, 10):
+        data = message(sequence, sender="admin")
+        data["timestamp"] = (NOW + timedelta(seconds=sequence)).isoformat()
+        watcher.process(data)
+    with sqlite3.connect(store.path) as connection:
+        near_context = json.loads(
+            connection.execute(
+                "SELECT context_json FROM risk_evaluations ORDER BY event_id DESC LIMIT 1"
+            ).fetchone()[0]
+        )
+    assert near_context["activity_count_1m"] == 9
+    assert near_context["qualified_activity_burst"] is False
+
+    no_base = RiskEngine().evaluate(
+        evidence(),
+        HistoricalContext(
+            activity_count_1m=10,
+            activity_burst_threshold=10,
+            collector_coverage_sufficient=True,
+            qualified_activity_burst=True,
+        ),
+    )
+    assert no_base.score == 0
+    assert no_base.classification is ShadowClassification.NONE
+
+
+def test_quoted_and_repeated_write_routes_remain_ambiguous_medium(tmp_path):
+    store = EventStore(tmp_path / "events.sqlite3")
+    store.initialize()
+    watcher = Watcher(store)
+    for sequence in range(1, 4):
+        event, inserted = watcher.process(
+            message(
+                sequence,
+                text=f"Documentation example only: `{WRITE_URL}`",
+                minute=sequence,
+            )
+        )
+        assert inserted and event.severity.name == "MEDIUM"
+    with sqlite3.connect(store.path) as connection:
+        rows = connection.execute(
+            "SELECT score, shadow_classification FROM risk_evaluations ORDER BY event_id"
+        ).fetchall()
+    assert rows == [(35, "MEDIUM"), (35, "MEDIUM"), (45, "MEDIUM")]
+
+
+def test_private_diagnostics_compare_without_exposing_identity_or_content(tmp_path):
+    store = EventStore(tmp_path / "events.sqlite3")
+    store.initialize()
+    watcher = Watcher(store)
+    watcher.process(message(1))
+    watcher.process(message(2, sender="did:key:zInfo", did="did:key:zInfo"))
+    watcher.process(message(3, sender="supp0rt"))
+    watcher.process(message(4, sender="admin"))
+    watcher.process(message(5, text=f"benign quotation {WRITE_URL}"))
+    diagnostics = store.risk_v2_diagnostics(
+        24, generated_at=datetime.now(UTC) + timedelta(hours=1)
+    )
+    assert diagnostics["production_distribution"] == {
+        "HIGH": 0,
+        "MEDIUM": 1,
+        "LOW": 1,
+        "INFO": 1,
+        "NONE": 2,
+    }
+    assert diagnostics["shadow_distribution"] == {
+        "CRITICAL": 0,
+        "HIGH": 0,
+        "MEDIUM": 1,
+        "LOW": 2,
+        "INFO": 1,
+        "NONE": 1,
+    }
+    assert diagnostics["disagreements"] == 1
+    assert {
+        (item["production"], item["shadow"], item["events"])
+        for item in diagnostics["disagreement_matrix"]
+    } == {
+        ("INFO", "INFO", 1),
+        ("LOW", "LOW", 1),
+        ("MEDIUM", "MEDIUM", 1),
+        ("NONE", "LOW", 1),
+        ("NONE", "NONE", 1),
+    }
+    encoded = json.dumps(diagnostics)
+    assert "did:key:zInfo" not in encoded
+    assert WRITE_URL not in encoded
+    assert "benign quotation" not in encoded
 
 
 def create_legacy_database(path):
